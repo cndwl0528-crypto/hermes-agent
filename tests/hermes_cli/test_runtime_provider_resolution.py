@@ -933,6 +933,27 @@ def test_minimax_config_base_url_ignored_for_different_provider(monkeypatch):
     assert resolved["base_url"] == "https://api.minimax.io/anthropic"
 
 
+def test_copilot_explicit_runtime_respects_config_base_url(monkeypatch):
+    """Explicit Copilot runtime should still honor model.base_url."""
+    monkeypatch.setattr(rp, "resolve_provider", lambda *a, **k: "copilot")
+    monkeypatch.setattr(
+        rp,
+        "_get_model_config",
+        lambda: {
+            "provider": "copilot",
+            "base_url": "https://api.individual.githubcopilot.com",
+            "default": "claude-haiku-4.5",
+        },
+    )
+
+    resolved = rp.resolve_runtime_provider(
+        requested="copilot",
+        explicit_api_key="gho_explicit_test_token",
+    )
+
+    assert resolved["base_url"] == "https://api.individual.githubcopilot.com"
+
+
 def test_alibaba_default_coding_intl_endpoint_uses_chat_completions(monkeypatch):
     """Alibaba default coding-intl /v1 URL should use chat_completions mode."""
     monkeypatch.setattr(rp, "resolve_provider", lambda *a, **k: "alibaba")

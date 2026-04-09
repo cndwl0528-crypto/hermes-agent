@@ -541,13 +541,18 @@ def _resolve_explicit_runtime(
         if pconfig.base_url_env_var:
             env_url = os.getenv(pconfig.base_url_env_var, "").strip().rstrip("/")
 
+        cfg_provider = str(model_cfg.get("provider") or "").strip().lower()
+        cfg_base_url = ""
+        if cfg_provider == provider:
+            cfg_base_url = str(model_cfg.get("base_url") or "").strip().rstrip("/")
+
         base_url = explicit_base_url
         if not base_url:
             if provider == "kimi-coding":
                 creds = resolve_api_key_provider_credentials(provider)
                 base_url = creds.get("base_url", "").rstrip("/")
             else:
-                base_url = env_url or pconfig.inference_base_url
+                base_url = env_url or cfg_base_url or pconfig.inference_base_url
 
         api_key = explicit_api_key
         if not api_key:

@@ -193,21 +193,41 @@ def _setup_provider_model_selection(config, provider_id, current_model, prompt_c
     pconfig = PROVIDER_REGISTRY[provider_id]
     is_copilot_catalog_provider = provider_id in {"copilot", "copilot-acp"}
 
+    def _configured_provider_base_url(target_provider_id: str) -> str:
+        model_cfg = config.get("model")
+        if not isinstance(model_cfg, dict):
+            return ""
+
+        cfg_provider = str(model_cfg.get("provider") or "").strip().lower()
+        cfg_base_url = str(model_cfg.get("base_url") or "").strip().rstrip("/")
+        if cfg_provider != target_provider_id or not cfg_base_url:
+            return ""
+        return cfg_base_url
+
     # Resolve API key and base URL for the probe
     if is_copilot_catalog_provider:
         api_key = ""
         if provider_id == "copilot":
             creds = resolve_api_key_provider_credentials(provider_id)
             api_key = creds.get("api_key", "")
-            base_url = creds.get("base_url", "") or pconfig.inference_base_url
+            base_url = (
+                _configured_provider_base_url(provider_id)
+                or creds.get("base_url", "")
+                or pconfig.inference_base_url
+            )
         else:
             try:
                 creds = resolve_api_key_provider_credentials("copilot")
                 api_key = creds.get("api_key", "")
             except Exception:
-                pass
-            base_url = pconfig.inference_base_url
-        catalog = fetch_github_model_catalog(api_key)
+                base_url = _configured_provider_base_url("copilot") or pconfig.inference_base_url
+            else:
+                base_url = (
+                    _configured_provider_base_url("copilot")
+                    or creds.get("base_url", "")
+                    or pconfig.inference_base_url
+                )
+        catalog = fetch_github_model_catalog(api_key, base_url=base_url)
         current_model = normalize_copilot_model_id(
             current_model,
             catalog=catalog,

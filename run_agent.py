@@ -782,16 +782,17 @@ class AIAgent:
                         "X-OpenRouter-Title": "Hermes Agent",
                         "X-OpenRouter-Categories": "productivity,cli-agent",
                     }
-                elif "api.githubcopilot.com" in effective_base.lower():
-                    from hermes_cli.models import copilot_default_headers
-
-                    client_kwargs["default_headers"] = copilot_default_headers()
                 elif "api.kimi.com" in effective_base.lower():
                     client_kwargs["default_headers"] = {
                         "User-Agent": "KimiCLI/1.3",
                     }
                 elif "portal.qwen.ai" in effective_base.lower():
                     client_kwargs["default_headers"] = _qwen_portal_headers()
+                else:
+                    from hermes_cli.models import copilot_default_headers, is_copilot_base_url
+
+                    if is_copilot_base_url(effective_base):
+                        client_kwargs["default_headers"] = copilot_default_headers()
             else:
                 # No explicit creds — use the centralized provider router
                 from agent.auxiliary_client import resolve_provider_client
@@ -4149,16 +4150,17 @@ class AIAgent:
         normalized = (base_url or "").lower()
         if "openrouter" in normalized:
             self._client_kwargs["default_headers"] = dict(_OR_HEADERS)
-        elif "api.githubcopilot.com" in normalized:
-            from hermes_cli.models import copilot_default_headers
-
-            self._client_kwargs["default_headers"] = copilot_default_headers()
         elif "api.kimi.com" in normalized:
             self._client_kwargs["default_headers"] = {"User-Agent": "KimiCLI/1.3"}
         elif "portal.qwen.ai" in normalized:
             self._client_kwargs["default_headers"] = _qwen_portal_headers()
         else:
-            self._client_kwargs.pop("default_headers", None)
+            from hermes_cli.models import copilot_default_headers, is_copilot_base_url
+
+            if is_copilot_base_url(base_url):
+                self._client_kwargs["default_headers"] = copilot_default_headers()
+            else:
+                self._client_kwargs.pop("default_headers", None)
 
     def _swap_credential(self, entry) -> None:
         runtime_key = getattr(entry, "runtime_api_key", None) or getattr(entry, "access_token", "")
@@ -5410,9 +5412,11 @@ class AIAgent:
             if not instructions:
                 instructions = DEFAULT_AGENT_IDENTITY
 
+            from hermes_cli.models import is_copilot_base_url
+
             is_github_responses = (
                 "models.github.ai" in self.base_url.lower()
-                or "api.githubcopilot.com" in self.base_url.lower()
+                or is_copilot_base_url(self.base_url)
             )
 
             # Resolve reasoning effort: config > default (medium)
@@ -5564,9 +5568,11 @@ class AIAgent:
         extra_body = {}
 
         _is_openrouter = self._is_openrouter_url()
+        from hermes_cli.models import is_copilot_base_url
+
         _is_github_models = (
             "models.github.ai" in self._base_url_lower
-            or "api.githubcopilot.com" in self._base_url_lower
+            or is_copilot_base_url(self.base_url)
         )
 
         # Provider preferences (only, ignore, order, sort) are OpenRouter-
@@ -5635,7 +5641,9 @@ class AIAgent:
             return True
         if "ai-gateway.vercel.sh" in self._base_url_lower:
             return True
-        if "models.github.ai" in self._base_url_lower or "api.githubcopilot.com" in self._base_url_lower:
+        from hermes_cli.models import is_copilot_base_url
+
+        if "models.github.ai" in self._base_url_lower or is_copilot_base_url(self.base_url):
             try:
                 from hermes_cli.models import github_model_reasoning_efforts
 

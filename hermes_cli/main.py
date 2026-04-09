@@ -279,6 +279,18 @@ def _has_any_provider_configured() -> bool:
     return False
 
 
+def _configured_provider_base_url(config: dict, provider_id: str) -> str:
+    model_cfg = config.get("model")
+    if not isinstance(model_cfg, dict):
+        return ""
+
+    cfg_provider = str(model_cfg.get("provider") or "").strip().lower()
+    cfg_base_url = str(model_cfg.get("base_url") or "").strip().rstrip("/")
+    if cfg_provider != provider_id or not cfg_base_url:
+        return ""
+    return cfg_base_url
+
+
 def _session_browse_picker(sessions: list) -> Optional[str]:
     """Interactive curses-based session browser with live search filtering.
 
@@ -1984,9 +1996,10 @@ def _model_flow_copilot(config, current_model=""):
             print("  GitHub token: ✓")
         print()
 
-    effective_base = pconfig.inference_base_url
+    configured_base = _configured_provider_base_url(config, provider_id)
+    effective_base = configured_base or creds.get("base_url") or pconfig.inference_base_url
 
-    catalog = fetch_github_model_catalog(api_key)
+    catalog = fetch_github_model_catalog(api_key, base_url=effective_base)
     live_models = [item.get("id", "") for item in catalog if item.get("id")] if catalog else fetch_api_models(api_key, effective_base)
     normalized_current_model = normalize_copilot_model_id(
         current_model,
@@ -2076,8 +2089,6 @@ def _model_flow_copilot_acp(config, current_model=""):
     )
     from hermes_cli.config import load_config, save_config
 
-    del config
-
     provider_id = "copilot-acp"
     pconfig = PROVIDER_REGISTRY[provider_id]
 
@@ -2101,14 +2112,17 @@ def _model_flow_copilot_acp(config, current_model=""):
 
     effective_base = creds.get("base_url") or effective_base
 
+    current_cfg = config if isinstance(config, dict) else load_config()
     catalog_api_key = ""
+    catalog_creds = {}
     try:
         catalog_creds = resolve_api_key_provider_credentials("copilot")
         catalog_api_key = catalog_creds.get("api_key", "")
     except Exception:
         pass
 
-    catalog = fetch_github_model_catalog(catalog_api_key)
+    catalog_base = _configured_provider_base_url(current_cfg, "copilot") or catalog_creds.get("base_url", "")
+    catalog = fetch_github_model_catalog(catalog_api_key, base_url=catalog_base)
     normalized_current_model = normalize_copilot_model_id(
         current_model,
         catalog=catalog,

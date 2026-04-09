@@ -13,6 +13,7 @@ import urllib.request
 import urllib.error
 from difflib import get_close_matches
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 COPILOT_BASE_URL = "https://api.githubcopilot.com"
 COPILOT_MODELS_URL = f"{COPILOT_BASE_URL}/models"
@@ -23,6 +24,59 @@ COPILOT_REASONING_EFFORTS_O_SERIES = ["low", "medium", "high"]
 # Backward-compatible aliases for the earlier GitHub Models-backed Copilot work.
 GITHUB_MODELS_BASE_URL = COPILOT_BASE_URL
 GITHUB_MODELS_CATALOG_URL = COPILOT_MODELS_URL
+
+
+def _normalize_base_url(base_url: Optional[str]) -> str:
+    return (base_url or "").strip().rstrip("/")
+
+
+def _is_githubcopilot_host(host: str) -> bool:
+    return host == "githubcopilot.com" or host.endswith(".githubcopilot.com")
+
+
+def _parsed_base_url_parts(base_url: Optional[str]) -> tuple[str, str, str]:
+    normalized = _normalize_base_url(base_url).lower()
+    if not normalized:
+        return "", "", ""
+
+    parsed = urlparse(normalized if "://" in normalized else f"https://{normalized}")
+    host = (parsed.netloc or parsed.path).lower()
+    path = parsed.path.lower() if parsed.netloc else ""
+    return normalized, host, path
+
+
+def is_copilot_base_url(base_url: Optional[str]) -> bool:
+    normalized, host, _ = _parsed_base_url_parts(base_url)
+    if not normalized:
+        return False
+
+    return _is_githubcopilot_host(host)
+
+
+def is_github_models_base_url(base_url: Optional[str]) -> bool:
+    normalized, host, path = _parsed_base_url_parts(base_url)
+    if not normalized:
+        return False
+
+    if _is_githubcopilot_host(host):
+        return True
+    return host == "models.github.ai" and (
+        path == "/inference" or path.startswith("/inference/")
+    )
+
+
+def resolve_copilot_base_url(base_url: Optional[str] = None) -> str:
+    normalized, host, _ = _parsed_base_url_parts(base_url)
+    if not normalized:
+        return COPILOT_BASE_URL
+
+    if _is_githubcopilot_host(host):
+        return normalized
+    return COPILOT_BASE_URL
+
+
+def copilot_models_url(base_url: Optional[str] = None) -> str:
+    return resolve_copilot_base_url(base_url).rstrip("/") + "/models"
 
 # (model_id, display description shown in menus)
 OPENROUTER_MODELS: list[tuple[str, str]] = [
@@ -1186,9 +1240,12 @@ def _copilot_catalog_item_is_text_model(item: dict[str, Any]) -> bool:
 
 
 def fetch_github_model_catalog(
-    api_key: Optional[str] = None, timeout: float = 5.0
+    api_key: Optional[str] = None,
+    timeout: float = 5.0,
+    base_url: Optional[str] = None,
 ) -> Optional[list[dict[str, Any]]]:
     """Fetch the live GitHub Copilot model catalog for this account."""
+    models_url = copilot_models_url(base_url)
     attempts: list[dict[str, str]] = []
     if api_key:
         attempts.append({
@@ -1198,7 +1255,7 @@ def fetch_github_model_catalog(
     attempts.append(copilot_default_headers())
 
     for headers in attempts:
-        req = urllib.request.Request(COPILOT_MODELS_URL, headers=headers)
+        req = urllib.request.Request(models_url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode())
@@ -1221,15 +1278,15 @@ def fetch_github_model_catalog(
 
 
 def _is_github_models_base_url(base_url: Optional[str]) -> bool:
-    normalized = (base_url or "").strip().rstrip("/").lower()
-    return (
-        normalized.startswith(COPILOT_BASE_URL)
-        or normalized.startswith("https://models.github.ai/inference")
-    )
+    return is_github_models_base_url(base_url)
 
 
-def _fetch_github_models(api_key: Optional[str] = None, timeout: float = 5.0) -> Optional[list[str]]:
-    catalog = fetch_github_model_catalog(api_key=api_key, timeout=timeout)
+def _fetch_github_models(
+    api_key: Optional[str] = None,
+    timeout: float = 5.0,
+    base_url: Optional[str] = None,
+) -> Optional[list[str]]:
+    catalog = fetch_github_model_catalog(api_key=api_key, timeout=timeout, base_url=base_url)
     if not catalog:
         return None
     return [item.get("id", "") for item in catalog if item.get("id")]
@@ -1488,11 +1545,12 @@ def probe_api_models(
         }
 
     if _is_github_models_base_url(normalized):
-        models = _fetch_github_models(api_key=api_key, timeout=timeout)
+        resolved_base_url = resolve_copilot_base_url(normalized)
+        models = _fetch_github_models(api_key=api_key, timeout=timeout, base_url=resolved_base_url)
         return {
             "models": models,
-            "probed_url": COPILOT_MODELS_URL,
-            "resolved_base_url": COPILOT_BASE_URL,
+            "probed_url": copilot_models_url(resolved_base_url),
+            "resolved_base_url": resolved_base_url,
             "suggested_base_url": None,
             "used_fallback": False,
         }
@@ -1510,7 +1568,7 @@ def probe_api_models(
     headers: dict[str, str] = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    if normalized.startswith(COPILOT_BASE_URL):
+    if is_copilot_base_url(normalized):
         headers.update(copilot_default_headers())
 
     for candidate_base, is_fallback in candidates:

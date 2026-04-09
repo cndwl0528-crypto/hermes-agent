@@ -754,6 +754,30 @@ class TestAuxiliaryPoolAwareness:
         assert call_kwargs["base_url"] == "https://api.githubcopilot.com"
         assert call_kwargs["default_headers"]["Editor-Version"]
 
+    def test_resolve_provider_client_copilot_individual_url_adds_headers(self, monkeypatch):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+
+        with (
+            patch(
+                "hermes_cli.auth.resolve_api_key_provider_credentials",
+                return_value={
+                    "provider": "copilot",
+                    "api_key": "gh-cli-token",
+                    "base_url": "https://api.individual.githubcopilot.com",
+                    "source": "gh auth token",
+                },
+            ),
+            patch("agent.auxiliary_client.OpenAI") as mock_openai,
+        ):
+            client, model = resolve_provider_client("copilot", model="gpt-5.4")
+
+        assert client is not None
+        assert model == "gpt-5.4"
+        call_kwargs = mock_openai.call_args.kwargs
+        assert call_kwargs["base_url"] == "https://api.individual.githubcopilot.com"
+        assert call_kwargs["default_headers"]["Editor-Version"]
+
     def test_vision_auto_uses_active_provider_as_fallback(self, monkeypatch):
         """When no OpenRouter/Nous available, vision auto falls back to active provider."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "***")

@@ -22,6 +22,7 @@ from unittest.mock import patch, MagicMock
 from agent.model_metadata import (
     CONTEXT_PROBE_TIERS,
     DEFAULT_CONTEXT_LENGTHS,
+    _infer_provider_from_url,
     _strip_provider_prefix,
     estimate_tokens_rough,
     estimate_messages_tokens_rough,
@@ -38,6 +39,14 @@ from agent.model_metadata import (
 # =========================================================================
 # Token estimation
 # =========================================================================
+
+
+class TestProviderInference:
+    def test_copilot_subdomains_are_recognized(self):
+        assert _infer_provider_from_url("https://api.individual.githubcopilot.com") == "copilot"
+
+    def test_unrelated_githubcopilot_like_hosts_are_rejected(self):
+        assert _infer_provider_from_url("https://evilgithubcopilot.com") is None
 
 class TestEstimateTokensRough:
     def test_empty_string(self):

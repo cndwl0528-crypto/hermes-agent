@@ -153,3 +153,99 @@ class TestSetupProviderModelSelection:
         assert "kimi-k2.5" in offered
         assert "minimax-m2.7" in offered
         assert all("opencode-go/" not in choice for choice in offered)
+
+    def test_copilot_uses_configured_individual_base_url_for_catalog(self):
+        from hermes_cli.setup import _setup_provider_model_selection
+
+        class FakePConfig:
+            def __init__(self, name, env_vars, inference_url):
+                self.name = name
+                self.api_key_env_vars = env_vars
+                self.base_url_env_var = None
+                self.inference_base_url = inference_url
+
+        provider_registry = {
+            "copilot": FakePConfig(
+                "GitHub Copilot",
+                ["COPILOT_GITHUB_TOKEN"],
+                "https://api.githubcopilot.com",
+            ),
+        }
+        config = {
+            "model": {
+                "provider": "copilot",
+                "base_url": "https://api.individual.githubcopilot.com",
+            }
+        }
+
+        with patch("hermes_cli.auth.PROVIDER_REGISTRY", provider_registry), \
+             patch(
+                 "hermes_cli.auth.resolve_api_key_provider_credentials",
+                 return_value={
+                     "provider": "copilot",
+                     "api_key": "gh-token",
+                     "base_url": "https://api.githubcopilot.com",
+                     "source": "gh auth token",
+                 },
+             ), \
+             patch(
+                 "hermes_cli.models.fetch_github_model_catalog",
+                 return_value=[{"id": "claude-haiku-4.5"}],
+             ) as mock_catalog:
+            _setup_provider_model_selection(
+                config=config,
+                provider_id="copilot",
+                current_model="claude-haiku-4.5",
+                prompt_choice=lambda _label, choices, _default: len(choices) - 1,
+                prompt_fn=lambda _msg: None,
+            )
+
+        assert mock_catalog.call_args.kwargs["base_url"] == "https://api.individual.githubcopilot.com"
+
+    def test_copilot_acp_uses_configured_individual_base_url_for_catalog(self):
+        from hermes_cli.setup import _setup_provider_model_selection
+
+        class FakePConfig:
+            def __init__(self, name, env_vars, inference_url):
+                self.name = name
+                self.api_key_env_vars = env_vars
+                self.base_url_env_var = None
+                self.inference_base_url = inference_url
+
+        provider_registry = {
+            "copilot-acp": FakePConfig(
+                "GitHub Copilot ACP",
+                [],
+                "acp://copilot",
+            ),
+        }
+        config = {
+            "model": {
+                "provider": "copilot",
+                "base_url": "https://api.individual.githubcopilot.com",
+            }
+        }
+
+        with patch("hermes_cli.auth.PROVIDER_REGISTRY", provider_registry), \
+             patch(
+                 "hermes_cli.auth.resolve_api_key_provider_credentials",
+                 return_value={
+                     "provider": "copilot",
+                     "api_key": "gh-token",
+                     "base_url": "https://api.githubcopilot.com",
+                     "source": "gh auth token",
+                 },
+             ), \
+             patch(
+                 "hermes_cli.models.fetch_github_model_catalog",
+                 return_value=[{"id": "claude-haiku-4.5"}],
+             ) as mock_catalog:
+            _setup_provider_model_selection(
+                config=config,
+                provider_id="copilot-acp",
+                current_model="claude-haiku-4.5",
+                prompt_choice=lambda _label, choices, _default: len(choices) - 1,
+                prompt_fn=lambda _msg: None,
+            )
+
+        assert mock_catalog.call_args.kwargs["base_url"] == "https://api.individual.githubcopilot.com"

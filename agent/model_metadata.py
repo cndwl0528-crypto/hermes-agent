@@ -194,11 +194,14 @@ _URL_TO_PROVIDER: Dict[str, str] = {
     "generativelanguage.googleapis.com": "gemini",
     "inference-api.nousresearch.com": "nous",
     "api.deepseek.com": "deepseek",
-    "api.githubcopilot.com": "copilot",
     "models.github.ai": "copilot",
     "api.fireworks.ai": "fireworks",
     "opencode.ai": "opencode-go",
 }
+
+
+def _is_githubcopilot_host(host: str) -> bool:
+    return host == "githubcopilot.com" or host.endswith(".githubcopilot.com")
 
 
 def _infer_provider_from_url(base_url: str) -> Optional[str]:
@@ -213,6 +216,8 @@ def _infer_provider_from_url(base_url: str) -> Optional[str]:
         return None
     parsed = urlparse(normalized if "://" in normalized else f"https://{normalized}")
     host = parsed.netloc.lower() or parsed.path.lower()
+    if _is_githubcopilot_host(host):
+        return "copilot"
     for url_part, provider in _URL_TO_PROVIDER.items():
         if url_part in host:
             return provider

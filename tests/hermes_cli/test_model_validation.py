@@ -8,6 +8,7 @@ from hermes_cli.models import (
     curated_models_for_provider,
     fetch_api_models,
     github_model_reasoning_efforts,
+    is_copilot_base_url,
     normalize_copilot_model_id,
     normalize_opencode_model_id,
     normalize_provider,
@@ -270,6 +271,56 @@ class TestFetchApiModels:
 
         assert catalog is not None
         assert [item["id"] for item in catalog] == ["gpt-5.4"]
+
+    def test_probe_api_models_adds_copilot_headers_for_individual_endpoint(self):
+        captured = {}
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b'{"data": [{"id": "claude-haiku-4.5"}]}'
+
+        def _fake_urlopen(req, timeout=5.0):
+            captured["url"] = req.full_url
+            captured["headers"] = {k.lower(): v for k, v in req.header_items()}
+            return _Resp()
+
+        with patch("hermes_cli.models.urllib.request.urlopen", side_effect=_fake_urlopen):
+            probe = probe_api_models("gh-token", "https://api.individual.githubcopilot.com")
+
+        assert captured["url"] == "https://api.individual.githubcopilot.com/models"
+        assert captured["headers"]["editor-version"]
+        assert captured["headers"]["openai-intent"] == "conversation-edits"
+        assert probe["resolved_base_url"] == "https://api.individual.githubcopilot.com"
+        assert probe["models"] == ["claude-haiku-4.5"]
+
+    def test_probe_api_models_normalizes_github_models_inference_url(self):
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b'{"data": [{"id": "gpt-5.4"}]}'
+
+        with patch("hermes_cli.models.urllib.request.urlopen", return_value=_Resp()) as mock_urlopen:
+            probe = probe_api_models("gh-token", "https://models.github.ai/inference/v1")
+
+        assert mock_urlopen.call_args[0][0].full_url == "https://api.githubcopilot.com/models"
+        assert probe["probed_url"] == "https://api.githubcopilot.com/models"
+        assert probe["resolved_base_url"] == "https://api.githubcopilot.com"
+
+    def test_is_copilot_base_url_rejects_unrelated_hosts(self):
+        assert is_copilot_base_url("https://api.individual.githubcopilot.com") is True
+        assert is_copilot_base_url("https://models.github.ai/inference/v1") is False
+        assert is_copilot_base_url("https://evilgithubcopilot.com") is False
 
 
 class TestGithubReasoningEfforts:
