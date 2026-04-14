@@ -22,6 +22,8 @@ async function getSessionToken(): Promise<string> {
 
 export const api = {
   getStatus: () => fetchJSON<StatusResponse>("/api/status"),
+  getProjectOpsSummary: () => fetchJSON<ProjectOpsSummary>("/api/project-ops/summary"),
+  getProjectOpsProjects: () => fetchJSON<ProjectOpsProjectsResponse>("/api/project-ops/projects"),
   getSessions: (limit = 20, offset = 0) =>
     fetchJSON<PaginatedSessions>(`/api/sessions?limit=${limit}&offset=${offset}`),
   getSessionMessages: (id: string) =>
@@ -191,6 +193,30 @@ export interface StatusResponse {
   latest_config_version: number;
   release_date: string;
   version: string;
+}
+
+export interface ProjectOpsSummary {
+  active_count: number;
+  attach_pending_count: number;
+  attach_selected_count: number;
+  available: boolean;
+  bridge_last_error: string | null;
+  bridge_status: string;
+  carry_forward_count: number;
+  dashboard_url: string | null;
+  description: string;
+  label: string;
+  latest_task_id: string | null;
+  latest_task_title: string | null;
+  latest_updated_at: string | null;
+  project_name: string;
+  project_root: string;
+  resolved_count: number;
+  source_root: string;
+}
+
+export interface ProjectOpsProjectsResponse {
+  projects: ProjectOpsSummary[];
 }
 
 export interface SessionInfo {

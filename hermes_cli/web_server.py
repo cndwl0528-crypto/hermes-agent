@@ -12,6 +12,7 @@ Usage:
 import asyncio
 import json
 import logging
+import os
 import secrets
 import sys
 import threading
@@ -264,6 +265,199 @@ class EnvVarReveal(BaseModel):
     key: str
 
 
+def _project_ops_root() -> Path:
+    configured = os.environ.get("HERMES_PROJECT_ROOT")
+    if configured:
+        return Path(configured).expanduser()
+    return Path.home() / "Projects" / "hi-alice"
+
+
+def _project_ops_dashboard_url() -> str:
+    return os.environ.get(
+        "HERMES_PROJECT_OPS_URL",
+        "http://127.0.0.1:3000/super-mario-dashboard",
+    )
+
+
+def _project_ops_registry_path() -> Path:
+    return Path.home() / ".hermes" / "project-ops.json"
+
+
+def _safe_json_file(path: Path, default: Any) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _default_project_ops_entries() -> list[dict[str, Any]]:
+    return [
+        {
+            "project_name": "hi-alice",
+            "label": "Mario 작전실",
+            "description": "학습 흐름, 참고 메모, 마무리 기록을 보는 운영 화면",
+            "project_root": str(_project_ops_root()),
+            "dashboard_url": _project_ops_dashboard_url(),
+        }
+    ]
+
+
+def _normalize_project_ops_entry(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+
+    root_value = raw.get("project_root") or raw.get("root")
+    if not root_value:
+        return None
+
+    project_root = Path(str(root_value)).expanduser()
+    project_name = str(raw.get("project_name") or raw.get("name") or project_root.name).strip()
+    if not project_name:
+        project_name = project_root.name
+
+    dashboard_url = raw.get("dashboard_url") or raw.get("url")
+    if not dashboard_url and project_name == "hi-alice":
+        dashboard_url = _project_ops_dashboard_url()
+
+    return {
+        "project_name": project_name,
+        "label": str(raw.get("label") or raw.get("display_name") or project_name).strip(),
+        "description": str(raw.get("description") or "").strip(),
+        "project_root": str(project_root),
+        "dashboard_url": str(dashboard_url).strip() if dashboard_url else None,
+    }
+
+
+def _load_project_ops_entries() -> list[dict[str, Any]]:
+    configured_entries: Any = None
+    env_value = os.environ.get("HERMES_PROJECT_OPS_PROJECTS")
+    if env_value:
+        try:
+            configured_entries = json.loads(env_value)
+        except Exception:
+            configured_entries = None
+
+    if configured_entries is None:
+        configured_entries = _safe_json_file(_project_ops_registry_path(), None)
+
+    if isinstance(configured_entries, dict):
+        configured_entries = configured_entries.get("projects")
+
+    entries: list[dict[str, Any]] = []
+    if isinstance(configured_entries, list):
+        for raw_entry in configured_entries:
+            normalized = _normalize_project_ops_entry(raw_entry)
+            if normalized:
+                entries.append(normalized)
+
+    if not entries:
+        entries = _default_project_ops_entries()
+
+    return entries
+
+
+def _latest_project_run(project_root: Path) -> dict[str, Any] | None:
+    floor_runs_root = project_root / ".harness" / "floor-runs"
+    if not floor_runs_root.exists():
+        return None
+
+    latest_record = None
+    latest_key = ""
+
+    for run_date in sorted(
+        (entry for entry in floor_runs_root.iterdir() if entry.is_dir()),
+        key=lambda entry: entry.name,
+        reverse=True,
+    ):
+        for task_dir in sorted(
+            (entry for entry in run_date.iterdir() if entry.is_dir()),
+            key=lambda entry: entry.name,
+            reverse=True,
+        ):
+            task_packet = _safe_json_file(task_dir / "task-packet.json", {})
+            review_packet = _safe_json_file(task_dir / "review-packet.json", {})
+            verify_record = _safe_json_file(task_dir / "verification-record.json", {})
+            closeout_record = _safe_json_file(task_dir / "closeout-record.json", {})
+            sort_key = (
+                closeout_record.get("closed_at")
+                or verify_record.get("verified_at")
+                or review_packet.get("reviewed_at")
+                or task_packet.get("created_at")
+                or f"{run_date.name}T00:00:00"
+            )
+            if sort_key > latest_key:
+                latest_key = sort_key
+                latest_record = {
+                    "task_id": task_dir.name,
+                    "title": task_packet.get("title")
+                    or task_packet.get("objective")
+                    or task_packet.get("problem")
+                    or task_dir.name,
+                    "updated_at": sort_key,
+                }
+
+    return latest_record
+
+
+def _build_project_ops_summary(entry: dict[str, Any]) -> dict[str, Any]:
+    project_root = Path(str(entry.get("project_root") or _project_ops_root())).expanduser()
+    harness_root = project_root / ".harness"
+    state = _safe_json_file(harness_root / "state.json", {"active": [], "carryForward": []})
+    history = _safe_json_file(harness_root / "history.json", {"resolved": []})
+    bridge = _safe_json_file(
+        harness_root / "bridge" / "last-status.json",
+        {"status": "unknown", "lastError": None},
+    )
+    current_attach = _safe_json_file(
+        harness_root / "reducer" / "current-attach.json",
+        {"items": [], "governor_review_pending_count": 0},
+    )
+    queue = _safe_json_file(
+        harness_root / "reducer" / "pending-attach-governor-queue.json",
+        [],
+    )
+    latest_run = _latest_project_run(project_root)
+
+    pending_queue_statuses = {"pending", "requested"}
+    attach_pending_count = sum(
+        1
+        for entry in queue
+        if isinstance(entry, dict) and entry.get("status") in pending_queue_statuses
+    )
+
+    return {
+        "available": harness_root.exists(),
+        "project_name": str(entry.get("project_name") or project_root.name),
+        "label": str(entry.get("label") or entry.get("project_name") or project_root.name),
+        "description": str(entry.get("description") or ""),
+        "project_root": str(project_root),
+        "source_root": str(harness_root),
+        "dashboard_url": entry.get("dashboard_url"),
+        "active_count": len(state.get("active") or []),
+        "carry_forward_count": len(state.get("carryForward") or []),
+        "resolved_count": len(history.get("resolved") or []),
+        "attach_selected_count": len(current_attach.get("items") or []),
+        "attach_pending_count": attach_pending_count
+        or int(current_attach.get("governor_review_pending_count") or 0),
+        "bridge_status": bridge.get("status") or "unknown",
+        "bridge_last_error": bridge.get("lastError"),
+        "latest_task_id": latest_run.get("task_id") if latest_run else None,
+        "latest_task_title": latest_run.get("title") if latest_run else None,
+        "latest_updated_at": latest_run.get("updated_at") if latest_run else None,
+    }
+
+
+def _project_ops_projects() -> list[dict[str, Any]]:
+    return [_build_project_ops_summary(entry) for entry in _load_project_ops_entries()]
+
+
+def _project_ops_summary() -> dict[str, Any]:
+    projects = _project_ops_projects()
+    if projects:
+        return projects[0]
+    return _build_project_ops_summary(_default_project_ops_entries()[0])
+
+
 @app.get("/api/status")
 async def get_status():
     current_ver, latest_ver = check_config_version()
@@ -335,6 +529,16 @@ async def get_status():
         "gateway_updated_at": gateway_updated_at,
         "active_sessions": active_sessions,
     }
+
+
+@app.get("/api/project-ops/summary")
+async def get_project_ops_summary():
+    return _project_ops_summary()
+
+
+@app.get("/api/project-ops/projects")
+async def get_project_ops_projects():
+    return {"projects": _project_ops_projects()}
 
 
 @app.get("/api/sessions")
