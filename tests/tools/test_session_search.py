@@ -1,5 +1,6 @@
 """Tests for tools/session_search_tool.py — helper functions and search dispatcher."""
 
+import asyncio
 import json
 import time
 import pytest
@@ -318,3 +319,181 @@ class TestSessionSearch:
         assert result["count"] == 0
         assert result["results"] == []
         assert result["sessions_searched"] == 0
+
+    def test_summaries_run_sequentially(self):
+        """Session summaries should not fan out concurrently against one backend."""
+        from unittest.mock import MagicMock, patch as _patch
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = [
+            {"session_id": "sid-1", "content": "match 1", "source": "cli",
+             "session_started": 1709500000, "model": "test"},
+            {"session_id": "sid-2", "content": "match 2", "source": "cli",
+             "session_started": 1709400000, "model": "test"},
+        ]
+
+        def _get_session(session_id):
+            return {"id": session_id, "parent_session_id": None, "started_at": 1709500000}
+
+        def _get_messages(session_id):
+            return [
+                {"role": "user", "content": f"question for {session_id}"},
+                {"role": "assistant", "content": f"answer for {session_id}"},
+            ]
+
+        mock_db.get_session.side_effect = _get_session
+        mock_db.get_messages_as_conversation.side_effect = _get_messages
+
+        active = 0
+        max_active = 0
+
+        async def _fake_summarize(conversation_text, query, session_meta):
+            nonlocal active, max_active
+            active += 1
+            max_active = max(max_active, active)
+            await asyncio.sleep(0)
+            active -= 1
+            return f"summary for {session_meta['id']}"
+
+        with _patch("tools.session_search_tool._summarize_session", side_effect=_fake_summarize):
+            result = json.loads(session_search(query="match", db=mock_db, limit=2))
+
+        assert result["success"] is True
+        assert result["count"] == 2
+        assert max_active == 1
+
+    def test_artifact_results_short_circuit_raw_session_search(self, tmp_path):
+        from unittest.mock import MagicMock, patch as _patch
+        from tools.session_search_tool import session_search
+
+        case_path = tmp_path / "cases" / "2026-04-14" / "2026-04-14-hi-alice-codex-abc123.json"
+        case_path.parent.mkdir(parents=True, exist_ok=True)
+        case_path.write_text(json.dumps({
+            "case_id": "2026-04-14-hi-alice-codex-abc123",
+            "date": "2026-04-14",
+            "domain": "hi-alice",
+            "objective": "Harden the case-register bridge for artifact-first recall.",
+            "root_cause": "The old search path depended on transcript summarization instead of promoted artifacts.",
+            "what_worked": ["Structured case-register promotion records were enough to answer recall queries."],
+            "what_failed": ["Raw session recall timed out on broad queries."],
+            "review_verdict": "approved",
+            "promotion_decision": "promoted",
+            "registration": {"source": "codex"},
+        }, ensure_ascii=False), encoding="utf-8")
+
+        mock_db = MagicMock()
+        with _patch("tools.session_search_tool.CASES_ROOT", tmp_path / "cases"), \
+             _patch("tools.session_search_tool.WORK_KNOWLEDGE_ROOT", tmp_path / "work"), \
+             _patch("tools.session_search_tool.PROMOTION_QUEUE_ROOT", tmp_path / "queue" / "promotions"):
+            result = json.loads(session_search(query="case-register recall", db=mock_db, limit=1))
+
+        assert result["success"] is True
+        assert result["search_strategy"] == "artifact_only"
+        assert result["artifact_results"] == 1
+        assert result["count"] == 1
+        assert result["results"][0]["artifact_type"] == "case"
+        assert result["results"][0]["artifact_id"] == "2026-04-14-hi-alice-codex-abc123"
+        mock_db.search_messages.assert_not_called()
+
+    def test_artifact_results_fall_back_to_raw_sessions_when_under_limit(self, tmp_path):
+        from unittest.mock import AsyncMock, MagicMock, patch as _patch
+        from tools.session_search_tool import session_search
+
+        work_doc = tmp_path / "work" / "hermes" / "self-growth-promotion-loop-v1.md"
+        work_doc.parent.mkdir(parents=True, exist_ok=True)
+        work_doc.write_text(
+            "# Self Growth Promotion Loop\n\nArtifact-first recall should search promoted work knowledge before raw sessions.\n",
+            encoding="utf-8",
+        )
+
+        mock_db = MagicMock()
+        mock_db.search_messages.return_value = [
+            {"session_id": "sid-1", "content": "artifact first recall", "source": "cli",
+             "session_started": 1709400000, "model": "test"},
+        ]
+        mock_db.get_session.return_value = {"id": "sid-1", "parent_session_id": None, "started_at": 1709400000}
+        mock_db.get_messages_as_conversation.return_value = [
+            {"role": "user", "content": "How should recall work?"},
+            {"role": "assistant", "content": "Use artifacts first, then raw sessions."},
+        ]
+
+        with _patch("tools.session_search_tool.CASES_ROOT", tmp_path / "cases"), \
+             _patch("tools.session_search_tool.WORK_KNOWLEDGE_ROOT", tmp_path / "work"), \
+             _patch("tools.session_search_tool.PROMOTION_QUEUE_ROOT", tmp_path / "queue" / "promotions"), \
+             _patch("tools.session_search_tool._summarize_session", new=AsyncMock(return_value="session summary")):
+            result = json.loads(session_search(query="promotion loop", db=mock_db, limit=2))
+
+        assert result["success"] is True
+        assert result["search_strategy"] == "artifact_then_session"
+        assert result["artifact_results"] == 1
+        assert result["count"] == 2
+        assert result["results"][0]["artifact_type"] == "work_knowledge"
+        assert result["results"][1]["session_id"] == "sid-1"
+        mock_db.search_messages.assert_called_once()
+
+    def test_today_query_uses_recent_artifacts_without_raw_session_search(self, tmp_path):
+        from datetime import datetime
+        from unittest.mock import MagicMock, patch as _patch
+        from tools.session_search_tool import session_search
+
+        case_path = tmp_path / "cases" / "2026-04-14" / "2026-04-14-hi-alice-codex-recent.json"
+        case_path.parent.mkdir(parents=True, exist_ok=True)
+        case_path.write_text(json.dumps({
+            "case_id": "2026-04-14-hi-alice-codex-recent",
+            "date": "2026-04-14",
+            "domain": "hi-alice",
+            "objective": "Recent artifact-first recall should avoid transcript summarization for today queries.",
+            "root_cause": "A raw session recall for today was timing out.",
+            "what_worked": ["Promoted cases captured the needed recall facts ahead of time."],
+            "review_verdict": "approved",
+            "promotion_decision": "promoted",
+            "registration": {"source": "codex"},
+        }, ensure_ascii=False), encoding="utf-8")
+
+        mock_db = MagicMock()
+        mock_db.list_sessions_rich.return_value = []
+
+        with _patch("tools.session_search_tool.CASES_ROOT", tmp_path / "cases"), \
+             _patch("tools.session_search_tool.WORK_KNOWLEDGE_ROOT", tmp_path / "work"), \
+             _patch("tools.session_search_tool.PROMOTION_QUEUE_ROOT", tmp_path / "queue" / "promotions"), \
+             _patch("tools.session_search_tool._local_now", return_value=datetime(2026, 4, 14, 9, 0, 0)):
+            result = json.loads(session_search(query="today", db=mock_db, limit=1))
+
+        assert result["success"] is True
+        assert result["search_strategy"] == "recent_artifact_only"
+        assert result["artifact_results"] == 1
+        assert result["results"][0]["artifact_type"] == "case"
+        mock_db.search_messages.assert_not_called()
+
+    def test_today_query_falls_back_to_recent_session_metadata_not_llm(self, tmp_path):
+        from datetime import datetime
+        from unittest.mock import MagicMock, patch as _patch
+        from tools.session_search_tool import session_search
+
+        mock_db = MagicMock()
+        mock_db.list_sessions_rich.return_value = [
+            {
+                "id": "sid-today-1",
+                "title": "Today planning",
+                "source": "cli",
+                "started_at": "2026-04-14T08:15:00+09:00",
+                "last_active": "2026-04-14T09:00:00+09:00",
+                "message_count": 8,
+                "preview": "Reviewed the promotion queue and tightened recall behavior.",
+                "parent_session_id": None,
+            }
+        ]
+
+        with _patch("tools.session_search_tool.CASES_ROOT", tmp_path / "cases"), \
+             _patch("tools.session_search_tool.WORK_KNOWLEDGE_ROOT", tmp_path / "work"), \
+             _patch("tools.session_search_tool.PROMOTION_QUEUE_ROOT", tmp_path / "queue" / "promotions"), \
+             _patch("tools.session_search_tool._local_now", return_value=datetime(2026, 4, 14, 9, 0, 0)):
+            result = json.loads(session_search(query="today", db=mock_db, limit=1))
+
+        assert result["success"] is True
+        assert result["search_strategy"] == "recent_sessions_only"
+        assert result["artifact_results"] == 0
+        assert result["results"][0]["artifact_type"] == "recent_session"
+        assert result["results"][0]["session_id"] == "sid-today-1"
+        mock_db.search_messages.assert_not_called()

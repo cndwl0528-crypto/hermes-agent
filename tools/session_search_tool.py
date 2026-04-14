@@ -3,7 +3,7 @@
 Session Search Tool - Long-Term Conversation Recall
 
 Searches past session transcripts in SQLite via FTS5, then summarizes the top
-matching sessions using a cheap/fast model (same pattern as web_extract).
+matching sessions using the configured session_search auxiliary model.
 Returns focused summaries of past conversations rather than raw transcripts,
 keeping the main model's context window clean.
 
@@ -11,7 +11,7 @@ Flow:
   1. FTS5 search finds matching messages ranked by relevance
   2. Groups by session, takes the top N unique sessions (default 3)
   3. Loads each session's conversation, truncates to ~100k chars centered on matches
-  4. Sends to Gemini Flash with a focused summarization prompt
+  4. Summarizes sessions one at a time with a focused recall prompt
   5. Returns per-session summaries with metadata
 """
 
@@ -20,11 +20,19 @@ import concurrent.futures
 import json
 import logging
 import re
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 
 from agent.auxiliary_client import async_call_llm, extract_content_or_reasoning
 MAX_SESSION_CHARS = 100_000
 MAX_SUMMARY_TOKENS = 10000
+SESSION_SUMMARY_MAX_RETRIES = 1
+HERMES_HOME = Path.home() / ".hermes"
+CASES_ROOT = HERMES_HOME / "learning" / "cases"
+WORK_KNOWLEDGE_ROOT = HERMES_HOME / "learning" / "work"
+PROMOTION_QUEUE_ROOT = HERMES_HOME / "learning" / "queue" / "promotions"
+_REVIEW_READY_CASE_VERDICTS = {"approved", "addressed"}
 
 
 def _format_timestamp(ts: Union[int, float, str, None]) -> str:
@@ -85,6 +93,596 @@ def _format_conversation(messages: List[Dict[str, Any]]) -> str:
             parts.append(f"[{role}]: {content}")
 
     return "\n\n".join(parts)
+
+
+def _local_now() -> datetime:
+    return datetime.now().astimezone()
+
+
+def _compact_text(value: Any, limit: int = 280) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 14].rstrip() + " ...[truncated]"
+
+
+def _coerce_text_list(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [item for item in (_compact_text(v) for v in value) if item]
+    if value is None:
+        return []
+    text = _compact_text(value)
+    return [text] if text else []
+
+
+def _parse_query_terms(query: str) -> tuple[List[str], List[str]]:
+    lowered = " ".join((query or "").lower().split())
+    phrases: List[str] = []
+    seen_phrases = set()
+    for match in re.finditer(r'"([^"]+)"', lowered):
+        phrase = " ".join(match.group(1).split())
+        if phrase and phrase not in seen_phrases:
+            phrases.append(phrase)
+            seen_phrases.add(phrase)
+
+    tokens: List[str] = []
+    seen_tokens = set()
+    for token in re.findall(r"[a-z0-9_./:-]+", lowered):
+        if token in {"and", "or", "not"}:
+            continue
+        if len(token) < 2 and not any(ch.isdigit() for ch in token):
+            continue
+        if token not in seen_tokens:
+            tokens.append(token)
+            seen_tokens.add(token)
+
+    return phrases, tokens
+
+
+def _should_search_learning_artifacts(query: str) -> bool:
+    phrases, tokens = _parse_query_terms(query)
+    return bool(phrases) or len(tokens) >= 2
+
+
+def _recent_query_window(query: str) -> Optional[tuple[str, datetime.date, datetime.date]]:
+    normalized = " ".join((query or "").strip().lower().split())
+    today = _local_now().date()
+
+    if normalized in {"today", "오늘"}:
+        return ("today", today, today)
+    if normalized in {"yesterday", "어제"}:
+        target = today - timedelta(days=1)
+        return ("yesterday", target, target)
+    if normalized in {"recent", "recently", "lately", "최근"}:
+        return ("recent", today - timedelta(days=6), today)
+    return None
+
+
+def _field_match_score(value: Any, phrases: List[str], terms: List[str], weight: int = 1) -> tuple[int, set[str]]:
+    text = str(value or "").strip()
+    if not text:
+        return 0, set()
+
+    lowered = text.lower()
+    score = 0
+    matched: set[str] = set()
+    for phrase in phrases:
+        if phrase in lowered:
+            score += 12 * weight
+            matched.add(phrase)
+    for term in terms:
+        if term in lowered:
+            score += 4 * weight
+            matched.add(term)
+    return score, matched
+
+
+def _matched_snippet(value: Any, phrases: List[str], terms: List[str], limit: int = 320) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        return ""
+
+    lowered = text.lower()
+    needles = [*phrases, *terms]
+    first_match = None
+    for needle in needles:
+        pos = lowered.find(needle)
+        if pos != -1 and (first_match is None or pos < first_match):
+            first_match = pos
+
+    if first_match is None:
+        return _compact_text(text, limit)
+
+    start = max(0, first_match - (limit // 3))
+    end = min(len(text), start + limit)
+    if end - start < limit and start > 0:
+        start = max(0, end - limit)
+
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "...[truncated] " + snippet
+    if end < len(text):
+        snippet = snippet + " ...[truncated]"
+    return snippet
+
+
+def _safe_load_json(path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _artifact_sort_timestamp(date_str: Optional[str], fallback_path: Path) -> float:
+    if date_str:
+        try:
+            return datetime.strptime(str(date_str), "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+        except Exception:
+            pass
+    try:
+        return fallback_path.stat().st_mtime
+    except Exception:
+        return 0.0
+
+
+def _timestamp_to_local_date(ts: Union[int, float, str, None]) -> Optional[datetime.date]:
+    if ts is None:
+        return None
+    try:
+        if isinstance(ts, (int, float)):
+            return datetime.fromtimestamp(float(ts)).astimezone().date()
+        if isinstance(ts, str):
+            stripped = ts.strip()
+            if not stripped:
+                return None
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", stripped):
+                return datetime.strptime(stripped, "%Y-%m-%d").date()
+            if stripped.replace(".", "").replace("-", "").isdigit():
+                return datetime.fromtimestamp(float(stripped)).astimezone().date()
+            iso = stripped.replace("Z", "+00:00")
+            return datetime.fromisoformat(iso).astimezone().date()
+    except Exception:
+        return None
+    return None
+
+
+def _search_promoted_cases(query: str, limit: int) -> List[Dict[str, Any]]:
+    phrases, terms = _parse_query_terms(query)
+    if not phrases and not terms:
+        return []
+    if not CASES_ROOT.exists():
+        return []
+
+    hits: List[Dict[str, Any]] = []
+    for path in sorted(CASES_ROOT.rglob("*.json")):
+        path_str = str(path)
+        if path.name == "schema-case-v1.json" or "/pending/" in path_str or "/dismissed/" in path_str:
+            continue
+
+        case = _safe_load_json(path)
+        if not case:
+            continue
+        if str(case.get("review_verdict") or "").strip() not in _REVIEW_READY_CASE_VERDICTS:
+            continue
+        if str(case.get("promotion_decision") or "").strip() != "promoted":
+            continue
+
+        score = 0
+        matched: set[str] = set()
+        for value, weight in (
+            (case.get("case_id"), 5),
+            (case.get("objective"), 5),
+            (case.get("root_cause"), 4),
+            (" ".join(_coerce_text_list(case.get("what_worked"))), 3),
+            (" ".join(_coerce_text_list(case.get("what_failed"))), 2),
+            (" ".join(_coerce_text_list(case.get("tooling_used"))), 2),
+            (" ".join(_coerce_text_list(case.get("artifacts"))), 1),
+            (case.get("notes"), 1),
+        ):
+            field_score, field_matched = _field_match_score(value, phrases, terms, weight)
+            score += field_score
+            matched.update(field_matched)
+
+        if score <= 0:
+            continue
+
+        summary_text = "\n".join(
+            part for part in (
+                case.get("objective"),
+                case.get("root_cause"),
+                "Worked: " + "; ".join(_coerce_text_list(case.get("what_worked"))[:2]) if case.get("what_worked") else "",
+                "Failed: " + "; ".join(_coerce_text_list(case.get("what_failed"))[:2]) if case.get("what_failed") else "",
+                case.get("notes"),
+            ) if part
+        )
+
+        hits.append({
+            "artifact_type": "case",
+            "artifact_id": str(case.get("case_id") or path.stem),
+            "when": str(case.get("date") or _format_timestamp(path.stat().st_mtime)),
+            "source": f"reviewed_case:{case.get('domain') or 'unknown'}",
+            "model": (case.get("registration") or {}).get("source") or (case.get("models_and_agents") or [None])[0],
+            "title": _compact_text(case.get("objective") or case.get("case_id") or path.stem, 140),
+            "summary": _matched_snippet(summary_text, phrases, terms),
+            "path": str(path),
+            "_priority": 0,
+            "_score": score + len(matched),
+            "_sort_ts": _artifact_sort_timestamp(case.get("date"), path),
+            "_case_id": str(case.get("case_id") or path.stem),
+        })
+
+    hits.sort(key=lambda item: (-item["_score"], -item["_sort_ts"], item["artifact_id"]))
+    return hits[:limit]
+
+
+def _read_work_doc_title(text: str, fallback: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip() or fallback
+    return fallback
+
+
+def _search_work_docs(query: str, limit: int) -> List[Dict[str, Any]]:
+    phrases, terms = _parse_query_terms(query)
+    if not phrases and not terms:
+        return []
+    if not WORK_KNOWLEDGE_ROOT.exists():
+        return []
+
+    hits: List[Dict[str, Any]] = []
+    for path in sorted(WORK_KNOWLEDGE_ROOT.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".md", ".markdown"}:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+
+        title = _read_work_doc_title(content, path.stem)
+        score = 0
+        matched: set[str] = set()
+        for value, weight in ((title, 5), (content, 2), (path.as_posix(), 1)):
+            field_score, field_matched = _field_match_score(value, phrases, terms, weight)
+            score += field_score
+            matched.update(field_matched)
+
+        if score <= 0:
+            continue
+
+        relative_path = path.relative_to(WORK_KNOWLEDGE_ROOT).as_posix()
+        hits.append({
+            "artifact_type": "work_knowledge",
+            "artifact_id": relative_path,
+            "when": _format_timestamp(path.stat().st_mtime),
+            "source": "work_knowledge",
+            "model": None,
+            "title": _compact_text(title, 140),
+            "summary": _matched_snippet(content, phrases, terms),
+            "path": str(path),
+            "_priority": 1,
+            "_score": score + len(matched),
+            "_sort_ts": path.stat().st_mtime,
+            "_case_id": None,
+        })
+
+    hits.sort(key=lambda item: (-item["_score"], -item["_sort_ts"], item["artifact_id"]))
+    return hits[:limit]
+
+
+def _search_promotion_packets(query: str, limit: int, excluded_case_ids: set[str]) -> List[Dict[str, Any]]:
+    phrases, terms = _parse_query_terms(query)
+    if not phrases and not terms:
+        return []
+    if not PROMOTION_QUEUE_ROOT.exists():
+        return []
+
+    hits: List[Dict[str, Any]] = []
+    for path in sorted(PROMOTION_QUEUE_ROOT.rglob("*.json")):
+        packet = _safe_load_json(path)
+        if not packet:
+            continue
+
+        case_ids = [str(item).strip() for item in packet.get("source_case_ids") or [] if str(item).strip()]
+        primary_case_id = case_ids[0] if case_ids else None
+        if primary_case_id and primary_case_id in excluded_case_ids:
+            continue
+
+        evidence_bundle = packet.get("evidence_bundle") or {}
+        score = 0
+        matched: set[str] = set()
+        for value, weight in (
+            (packet.get("packet_id"), 4),
+            (" ".join(case_ids), 4),
+            (packet.get("notes"), 2),
+            (" ".join(_coerce_text_list(evidence_bundle.get("worked"))), 3),
+            (" ".join(_coerce_text_list(evidence_bundle.get("failed"))), 2),
+            (" ".join(_coerce_text_list(evidence_bundle.get("files"))), 1),
+        ):
+            field_score, field_matched = _field_match_score(value, phrases, terms, weight)
+            score += field_score
+            matched.update(field_matched)
+
+        if score <= 0:
+            continue
+
+        summary_text = "\n".join(
+            part for part in (
+                packet.get("notes"),
+                "Worked: " + "; ".join(_coerce_text_list(evidence_bundle.get("worked"))[:2]) if evidence_bundle.get("worked") else "",
+                "Failed: " + "; ".join(_coerce_text_list(evidence_bundle.get("failed"))[:2]) if evidence_bundle.get("failed") else "",
+            ) if part
+        )
+
+        hits.append({
+            "artifact_type": "promotion_packet",
+            "artifact_id": str(packet.get("packet_id") or path.stem),
+            "when": _format_timestamp(path.stat().st_mtime),
+            "source": "promotion_queue",
+            "model": packet.get("generator_owner"),
+            "title": _compact_text(f"Promotion packet for {primary_case_id or path.stem}", 140),
+            "summary": _matched_snippet(summary_text, phrases, terms),
+            "path": str(path),
+            "_priority": 2,
+            "_score": score + len(matched),
+            "_sort_ts": path.stat().st_mtime,
+            "_case_id": primary_case_id,
+        })
+
+    hits.sort(key=lambda item: (-item["_score"], -item["_sort_ts"], item["artifact_id"]))
+    return hits[:limit]
+
+
+def _search_learning_artifacts(query: str, limit: int) -> List[Dict[str, Any]]:
+    case_hits = _search_promoted_cases(query, limit)
+    work_hits = _search_work_docs(query, limit)
+    excluded_case_ids = {
+        hit["_case_id"] for hit in case_hits if hit.get("_case_id")
+    }
+    packet_hits = _search_promotion_packets(query, limit, excluded_case_ids)
+
+    ordered_hits = [*case_hits, *work_hits, *packet_hits]
+    ordered_hits.sort(key=lambda item: (item["_priority"], -item["_score"], -item["_sort_ts"], item["artifact_id"]))
+
+    results: List[Dict[str, Any]] = []
+    seen = set()
+    for hit in ordered_hits:
+        key = (hit["artifact_type"], hit["artifact_id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append({
+            "artifact_type": hit["artifact_type"],
+            "artifact_id": hit["artifact_id"],
+            "when": hit["when"],
+            "source": hit["source"],
+            "model": hit["model"],
+            "title": hit["title"],
+            "summary": hit["summary"],
+            "path": hit["path"],
+        })
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+def _date_in_window(value: Optional[datetime.date], start_date: datetime.date, end_date: datetime.date) -> bool:
+    return bool(value and start_date <= value <= end_date)
+
+
+def _search_recent_promoted_cases(limit: int, start_date: datetime.date, end_date: datetime.date) -> List[Dict[str, Any]]:
+    if not CASES_ROOT.exists():
+        return []
+
+    hits: List[Dict[str, Any]] = []
+    for path in sorted(CASES_ROOT.rglob("*.json")):
+        path_str = str(path)
+        if path.name == "schema-case-v1.json" or "/pending/" in path_str or "/dismissed/" in path_str:
+            continue
+
+        case = _safe_load_json(path)
+        if not case:
+            continue
+        if str(case.get("review_verdict") or "").strip() not in _REVIEW_READY_CASE_VERDICTS:
+            continue
+        if str(case.get("promotion_decision") or "").strip() != "promoted":
+            continue
+
+        case_date = _timestamp_to_local_date(case.get("date"))
+        if not _date_in_window(case_date, start_date, end_date):
+            continue
+
+        summary = "\n".join(
+            part for part in (
+                case.get("objective"),
+                case.get("root_cause"),
+                "Worked: " + "; ".join(_coerce_text_list(case.get("what_worked"))[:2]) if case.get("what_worked") else "",
+                "Failed: " + "; ".join(_coerce_text_list(case.get("what_failed"))[:2]) if case.get("what_failed") else "",
+            ) if part
+        )
+
+        hits.append({
+            "artifact_type": "case",
+            "artifact_id": str(case.get("case_id") or path.stem),
+            "when": str(case.get("date") or _format_timestamp(path.stat().st_mtime)),
+            "source": f"reviewed_case:{case.get('domain') or 'unknown'}",
+            "model": (case.get("registration") or {}).get("source") or (case.get("models_and_agents") or [None])[0],
+            "title": _compact_text(case.get("objective") or case.get("case_id") or path.stem, 140),
+            "summary": _compact_text(summary, 320),
+            "path": str(path),
+            "_priority": 0,
+            "_sort_ts": _artifact_sort_timestamp(case.get("date"), path),
+            "_case_id": str(case.get("case_id") or path.stem),
+        })
+
+    hits.sort(key=lambda item: (-item["_sort_ts"], item["artifact_id"]))
+    return hits[:limit]
+
+
+def _search_recent_work_docs(limit: int, start_date: datetime.date, end_date: datetime.date) -> List[Dict[str, Any]]:
+    if not WORK_KNOWLEDGE_ROOT.exists():
+        return []
+
+    hits: List[Dict[str, Any]] = []
+    for path in sorted(WORK_KNOWLEDGE_ROOT.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".md", ".markdown"}:
+            continue
+
+        modified_date = _timestamp_to_local_date(path.stat().st_mtime)
+        if not _date_in_window(modified_date, start_date, end_date):
+            continue
+
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+
+        title = _read_work_doc_title(content, path.stem)
+        hits.append({
+            "artifact_type": "work_knowledge",
+            "artifact_id": path.relative_to(WORK_KNOWLEDGE_ROOT).as_posix(),
+            "when": _format_timestamp(path.stat().st_mtime),
+            "source": "work_knowledge",
+            "model": None,
+            "title": _compact_text(title, 140),
+            "summary": _compact_text(content, 320),
+            "path": str(path),
+            "_priority": 1,
+            "_sort_ts": path.stat().st_mtime,
+            "_case_id": None,
+        })
+
+    hits.sort(key=lambda item: (-item["_sort_ts"], item["artifact_id"]))
+    return hits[:limit]
+
+
+def _search_recent_promotion_packets(limit: int, start_date: datetime.date, end_date: datetime.date, excluded_case_ids: set[str]) -> List[Dict[str, Any]]:
+    if not PROMOTION_QUEUE_ROOT.exists():
+        return []
+
+    hits: List[Dict[str, Any]] = []
+    for path in sorted(PROMOTION_QUEUE_ROOT.rglob("*.json")):
+        modified_date = _timestamp_to_local_date(path.stat().st_mtime)
+        if not _date_in_window(modified_date, start_date, end_date):
+            continue
+
+        packet = _safe_load_json(path)
+        if not packet:
+            continue
+
+        case_ids = [str(item).strip() for item in packet.get("source_case_ids") or [] if str(item).strip()]
+        primary_case_id = case_ids[0] if case_ids else None
+        if primary_case_id and primary_case_id in excluded_case_ids:
+            continue
+
+        evidence_bundle = packet.get("evidence_bundle") or {}
+        summary = "\n".join(
+            part for part in (
+                packet.get("notes"),
+                "Worked: " + "; ".join(_coerce_text_list(evidence_bundle.get("worked"))[:2]) if evidence_bundle.get("worked") else "",
+                "Failed: " + "; ".join(_coerce_text_list(evidence_bundle.get("failed"))[:2]) if evidence_bundle.get("failed") else "",
+            ) if part
+        )
+
+        hits.append({
+            "artifact_type": "promotion_packet",
+            "artifact_id": str(packet.get("packet_id") or path.stem),
+            "when": _format_timestamp(path.stat().st_mtime),
+            "source": "promotion_queue",
+            "model": packet.get("generator_owner"),
+            "title": _compact_text(f"Promotion packet for {primary_case_id or path.stem}", 140),
+            "summary": _compact_text(summary, 320),
+            "path": str(path),
+            "_priority": 2,
+            "_sort_ts": path.stat().st_mtime,
+            "_case_id": primary_case_id,
+        })
+
+    hits.sort(key=lambda item: (-item["_sort_ts"], item["artifact_id"]))
+    return hits[:limit]
+
+
+def _search_recent_learning_artifacts(limit: int, start_date: datetime.date, end_date: datetime.date) -> List[Dict[str, Any]]:
+    case_hits = _search_recent_promoted_cases(limit, start_date, end_date)
+    work_hits = _search_recent_work_docs(limit, start_date, end_date)
+    excluded_case_ids = {
+        hit["_case_id"] for hit in case_hits if hit.get("_case_id")
+    }
+    packet_hits = _search_recent_promotion_packets(limit, start_date, end_date, excluded_case_ids)
+
+    ordered_hits = [*case_hits, *work_hits, *packet_hits]
+    ordered_hits.sort(key=lambda item: (-item["_sort_ts"], item["_priority"], item["artifact_id"]))
+
+    results: List[Dict[str, Any]] = []
+    seen = set()
+    for hit in ordered_hits:
+        key = (hit["artifact_type"], hit["artifact_id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append({
+            "artifact_type": hit["artifact_type"],
+            "artifact_id": hit["artifact_id"],
+            "when": hit["when"],
+            "source": hit["source"],
+            "model": hit["model"],
+            "title": hit["title"],
+            "summary": hit["summary"],
+            "path": hit["path"],
+        })
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _list_recent_sessions_window(db, limit: int, current_session_id: str, start_date: datetime.date, end_date: datetime.date) -> List[Dict[str, Any]]:
+    try:
+        sessions = db.list_sessions_rich(limit=max(limit + 10, 20), exclude_sources=list(_HIDDEN_SESSION_SOURCES))
+    except Exception:
+        return []
+
+    current_root = None
+    if current_session_id:
+        try:
+            sid = current_session_id
+            visited = set()
+            while sid and sid not in visited:
+                visited.add(sid)
+                s = db.get_session(sid)
+                parent = s.get("parent_session_id") if s else None
+                sid = parent if parent else None
+            current_root = max(visited, key=len) if visited else current_session_id
+        except Exception:
+            current_root = current_session_id
+
+    results: List[Dict[str, Any]] = []
+    for session in sessions:
+        sid = session.get("id", "")
+        if current_root and (sid == current_root or sid == current_session_id):
+            continue
+        if session.get("parent_session_id"):
+            continue
+
+        session_date = _timestamp_to_local_date(session.get("started_at") or session.get("last_active"))
+        if not _date_in_window(session_date, start_date, end_date):
+            continue
+
+        results.append({
+            "artifact_type": "recent_session",
+            "session_id": sid,
+            "when": _format_timestamp(session.get("started_at") or session.get("last_active")),
+            "source": session.get("source", ""),
+            "model": session.get("model"),
+            "title": session.get("title") or None,
+            "summary": _compact_text(session.get("preview") or "No preview available.", 320),
+            "message_count": session.get("message_count", 0),
+        })
+        if len(results) >= limit:
+            break
+
+    return results
 
 
 def _truncate_around_matches(
@@ -199,7 +797,9 @@ async def _summarize_session(
         f"Summarize this conversation with focus on: {query}"
     )
 
-    max_retries = 3
+    # Fail fast and fall back to raw previews instead of blocking recall on
+    # repeated retries from a slow auxiliary backend.
+    max_retries = SESSION_SUMMARY_MAX_RETRIES
     for attempt in range(max_retries):
         try:
             response = await async_call_llm(
@@ -320,10 +920,71 @@ def session_search(
     query = query.strip()
 
     try:
+        recent_window = None
+        artifact_hits: List[Dict[str, Any]] = []
+        recent_session_hits: List[Dict[str, Any]] = []
+
         # Parse role filter
         role_list = None
         if role_filter and role_filter.strip():
             role_list = [r.strip() for r in role_filter.split(",") if r.strip()]
+        else:
+            recent_window = _recent_query_window(query)
+            if recent_window:
+                _, start_date, end_date = recent_window
+                artifact_hits = _search_recent_learning_artifacts(limit, start_date, end_date)
+                if len(artifact_hits) < limit:
+                    recent_session_hits = _list_recent_sessions_window(
+                        db,
+                        limit=max(0, limit - len(artifact_hits)),
+                        current_session_id=current_session_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                    )
+                combined_recent_results = [*artifact_hits, *recent_session_hits]
+                if artifact_hits and recent_session_hits:
+                    search_strategy = "recent_artifact_then_sessions"
+                elif artifact_hits:
+                    search_strategy = "recent_artifact_only"
+                elif recent_session_hits:
+                    search_strategy = "recent_sessions_only"
+                else:
+                    search_strategy = "recent_sessions_only"
+
+                return json.dumps({
+                    "success": True,
+                    "query": query,
+                    "results": combined_recent_results,
+                    "count": len(combined_recent_results),
+                    "artifact_results": len(artifact_hits),
+                    "sessions_searched": 0,
+                    "search_strategy": search_strategy,
+                }, ensure_ascii=False)
+
+            if _should_search_learning_artifacts(query):
+                artifact_hits = _search_learning_artifacts(query, limit)
+            if len(artifact_hits) >= limit:
+                return json.dumps({
+                    "success": True,
+                    "query": query,
+                    "results": artifact_hits,
+                    "count": len(artifact_hits),
+                    "artifact_results": len(artifact_hits),
+                    "sessions_searched": 0,
+                    "search_strategy": "artifact_only",
+                }, ensure_ascii=False)
+
+        remaining_limit = max(0, limit - len(artifact_hits))
+        if remaining_limit == 0:
+            return json.dumps({
+                "success": True,
+                "query": query,
+                "results": artifact_hits,
+                "count": len(artifact_hits),
+                "artifact_results": len(artifact_hits),
+                "sessions_searched": 0,
+                "search_strategy": "artifact_only",
+            }, ensure_ascii=False)
 
         # FTS5 search -- get matches ranked by relevance
         raw_results = db.search_messages(
@@ -335,6 +996,16 @@ def session_search(
         )
 
         if not raw_results:
+            if artifact_hits:
+                return json.dumps({
+                    "success": True,
+                    "query": query,
+                    "results": artifact_hits,
+                    "count": len(artifact_hits),
+                    "artifact_results": len(artifact_hits),
+                    "sessions_searched": 0,
+                    "search_strategy": "artifact_only",
+                }, ensure_ascii=False)
             return json.dumps({
                 "success": True,
                 "query": query,
@@ -391,7 +1062,7 @@ def session_search(
                 result = dict(result)
                 result["session_id"] = resolved_sid
                 seen_sessions[resolved_sid] = result
-            if len(seen_sessions) >= limit:
+            if len(seen_sessions) >= remaining_limit:
                 break
 
         # Prepare all sessions for parallel summarization
@@ -413,14 +1084,17 @@ def session_search(
                     exc_info=True,
                 )
 
-        # Summarize all sessions in parallel
+        # Summarize sessions sequentially so a single auxiliary backend does
+        # not get flooded with concurrent long-context recalls.
         async def _summarize_all() -> List[Union[str, Exception]]:
-            """Summarize all sessions in parallel."""
-            coros = [
-                _summarize_session(text, query, meta)
-                for _, _, text, meta in tasks
-            ]
-            return await asyncio.gather(*coros, return_exceptions=True)
+            """Summarize sessions one at a time in ranking order."""
+            results: List[Union[str, Exception]] = []
+            for _, _, text, meta in tasks:
+                try:
+                    results.append(await _summarize_session(text, query, meta))
+                except Exception as exc:
+                    results.append(exc)
+            return results
 
         try:
             # Use _run_async() which properly manages event loops across
@@ -433,7 +1107,7 @@ def session_search(
             results = _run_async(_summarize_all())
         except concurrent.futures.TimeoutError:
             logging.warning(
-                "Session summarization timed out after 60 seconds",
+                "Session summarization timed out before all summaries completed",
                 exc_info=True,
             )
             return json.dumps({
@@ -467,12 +1141,22 @@ def session_search(
 
             summaries.append(entry)
 
+        combined_results = [*artifact_hits, *summaries]
+        if artifact_hits and summaries:
+            search_strategy = "artifact_then_session"
+        elif artifact_hits:
+            search_strategy = "artifact_only"
+        else:
+            search_strategy = "session_only"
+
         return json.dumps({
             "success": True,
             "query": query,
-            "results": summaries,
-            "count": len(summaries),
+            "results": combined_results,
+            "count": len(combined_results),
+            "artifact_results": len(artifact_hits),
             "sessions_searched": len(seen_sessions),
+            "search_strategy": search_strategy,
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -498,8 +1182,13 @@ SESSION_SEARCH_SCHEMA = {
         "1. Recent sessions (no query): Call with no arguments to see what was worked on recently. "
         "Returns titles, previews, and timestamps. Zero LLM cost, instant. "
         "Start here when the user asks what were we working on or what did we do recently.\n"
-        "2. Keyword search (with query): Search for specific topics across all past sessions. "
-        "Returns LLM-generated summaries of matching sessions.\n\n"
+        "Exact recent-time queries like today/오늘/yesterday/어제/recent/최근 also stay on the "
+        "fast path: they return recent promoted artifacts and recent session previews without "
+        "transcript summarization.\n"
+        "2. Keyword search (with query): Search reviewed learning artifacts first "
+        "(promoted cases, work knowledge docs, staged promotion packets), then "
+        "fall back to raw past sessions only if needed. "
+        "Returns artifact summaries and/or session summaries.\n\n"
         "USE THIS PROACTIVELY when:\n"
         "- The user says 'we did this before', 'remember when', 'last time', 'as I mentioned'\n"
         "- The user asks about a topic you worked on before but don't have in current context\n"
