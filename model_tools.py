@@ -21,6 +21,7 @@ Public API (signatures preserved from the original 2,400-line version):
 """
 
 import json
+import os
 import asyncio
 import logging
 import threading
@@ -496,6 +497,14 @@ def handle_function_call(
     try:
         if function_name in _AGENT_LOOP_TOOLS:
             return json.dumps({"error": f"{function_name} must be handled by the agent loop"})
+
+        try:
+            from hermes_cli.harness_gate import check_tool_gate
+            gate_error = check_tool_gate(function_name, function_args, os.getcwd())
+            if gate_error:
+                return json.dumps({"error": gate_error}, ensure_ascii=False)
+        except Exception:
+            pass
 
         try:
             from hermes_cli.plugins import invoke_hook
