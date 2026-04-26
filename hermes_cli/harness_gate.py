@@ -58,10 +58,22 @@ PREFIX_OPTION_VALUE_WORDS = {
 EXECUTION_STAGES = {"packet_a_execution", "packet_a_verify", "packet_a_verified"}
 REQUIRED_PLAN_HEADINGS = ("## Event", "## Function", "## Steps", "## Verify", "## Closeout")
 PATCH_FILE_RE = re.compile(r"^\*\*\* (?:Update|Add|Delete) File: (.+)$")
+MCP_TOOL_SUFFIXES = ("write_file", "patch", "terminal")
 
 
 def _is_planning_path(file_path: str) -> bool:
     return "/.planning/" in file_path or file_path.startswith(".planning/")
+
+
+def _canonical_tool_name(tool_name: str) -> str:
+    if tool_name in {"terminal", "write_file", "patch"}:
+        return tool_name
+    if not tool_name.startswith("mcp_"):
+        return tool_name
+    for suffix in MCP_TOOL_SUFFIXES:
+        if tool_name.endswith(f"_{suffix}"):
+            return suffix
+    return tool_name
 
 
 def _normalize_relative(cwd: str, target_path: str) -> str:
@@ -261,8 +273,9 @@ def check_tool_gate(tool_name: str, args: dict[str, Any] | None, cwd: str | None
     """Return an error message when a mutating tool should be blocked."""
     args = args or {}
     cwd = os.path.abspath(cwd or os.getcwd())
+    canonical_tool_name = _canonical_tool_name(tool_name)
 
-    if tool_name == "terminal":
+    if canonical_tool_name == "terminal":
         command = str(args.get("command") or "").strip()
         if _is_read_only_bash_command(command):
             return None
@@ -271,10 +284,10 @@ def check_tool_gate(tool_name: str, args: dict[str, Any] | None, cwd: str | None
             return _explain_missing_plan(check)
         return None
 
-    if tool_name not in {"write_file", "patch"}:
+    if canonical_tool_name not in {"write_file", "patch"}:
         return None
 
-    targets = list(_iter_mutation_targets(tool_name, args))
+    targets = list(_iter_mutation_targets(canonical_tool_name, args))
     if not targets:
         return None
 

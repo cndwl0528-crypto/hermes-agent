@@ -83,6 +83,28 @@ class HarnessGateTests(unittest.TestCase):
         self.assertIsNotNone(error)
         self.assertIn("scope creep outside locked packet file set", error)
 
+    def test_mcp_write_file_uses_harness_gate(self) -> None:
+        error = check_tool_gate("mcp_fs_write_file", {"path": "notes.txt", "content": "x"}, str(self.root))
+        self.assertIsNotNone(error)
+        self.assertIn("plan-first workflow is mandatory", error)
+
+    def test_mcp_write_file_respects_allowed_files(self) -> None:
+        write_plan_artifacts(self.root, allowed_files=["notes.txt"])
+        allowed = check_tool_gate("mcp_fs_write_file", {"path": "notes.txt", "content": "x"}, str(self.root))
+        blocked = check_tool_gate("mcp_fs_write_file", {"path": "other.txt", "content": "x"}, str(self.root))
+
+        self.assertIsNone(allowed)
+        self.assertIsNotNone(blocked)
+        self.assertIn("scope creep outside locked packet file set", blocked)
+
+    def test_mcp_terminal_uses_harness_gate(self) -> None:
+        blocked = check_tool_gate("mcp_shell_terminal", {"command": "npm test"}, str(self.root))
+        allowed = check_tool_gate("mcp_shell_terminal", {"command": "pwd"}, str(self.root))
+
+        self.assertIsNotNone(blocked)
+        self.assertIn("plan-first workflow is mandatory", blocked)
+        self.assertIsNone(allowed)
+
 
 if __name__ == "__main__":
     unittest.main()
