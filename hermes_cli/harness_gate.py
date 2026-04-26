@@ -58,7 +58,7 @@ PREFIX_OPTION_VALUE_WORDS = {
 EXECUTION_STAGES = {"packet_a_execution", "packet_a_verify", "packet_a_verified"}
 REQUIRED_PLAN_HEADINGS = ("## Event", "## Function", "## Steps", "## Verify", "## Closeout")
 PATCH_FILE_RE = re.compile(r"^\*\*\* (?:Update|Add|Delete) File: (.+)$")
-MCP_TOOL_SUFFIXES = ("write_file", "patch", "terminal")
+WRITE_LIKE_TOOL_SUFFIXES = ("write_file", "patch", "terminal")
 
 
 def _is_planning_path(file_path: str) -> bool:
@@ -68,9 +68,7 @@ def _is_planning_path(file_path: str) -> bool:
 def _canonical_tool_name(tool_name: str) -> str:
     if tool_name in {"terminal", "write_file", "patch"}:
         return tool_name
-    if not tool_name.startswith("mcp_"):
-        return tool_name
-    for suffix in MCP_TOOL_SUFFIXES:
+    for suffix in WRITE_LIKE_TOOL_SUFFIXES:
         if tool_name.endswith(f"_{suffix}"):
             return suffix
     return tool_name

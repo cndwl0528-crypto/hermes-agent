@@ -105,6 +105,28 @@ class HarnessGateTests(unittest.TestCase):
         self.assertIn("plan-first workflow is mandatory", blocked)
         self.assertIsNone(allowed)
 
+    def test_plugin_write_like_tool_uses_harness_gate(self) -> None:
+        error = check_tool_gate("plugin_builder_write_file", {"path": "notes.txt", "content": "x"}, str(self.root))
+        self.assertIsNotNone(error)
+        self.assertIn("plan-first workflow is mandatory", error)
+
+    def test_plugin_write_like_tool_respects_allowed_files(self) -> None:
+        write_plan_artifacts(self.root, allowed_files=["notes.txt"])
+        allowed = check_tool_gate("plugin_builder_write_file", {"path": "notes.txt", "content": "x"}, str(self.root))
+        blocked = check_tool_gate("plugin_builder_write_file", {"path": "other.txt", "content": "x"}, str(self.root))
+
+        self.assertIsNone(allowed)
+        self.assertIsNotNone(blocked)
+        self.assertIn("scope creep outside locked packet file set", blocked)
+
+    def test_plugin_terminal_like_tool_uses_harness_gate(self) -> None:
+        blocked = check_tool_gate("plugin_shell_terminal", {"command": "npm test"}, str(self.root))
+        allowed = check_tool_gate("plugin_shell_terminal", {"command": "pwd"}, str(self.root))
+
+        self.assertIsNotNone(blocked)
+        self.assertIn("plan-first workflow is mandatory", blocked)
+        self.assertIsNone(allowed)
+
 
 if __name__ == "__main__":
     unittest.main()
