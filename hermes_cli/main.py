@@ -123,6 +123,19 @@ def _apply_profile_override() -> None:
             print(f"Warning: profile override failed ({exc}), using default", file=sys.stderr)
             return
         os.environ["HERMES_HOME"] = hermes_home
+        # === Lane A Mario Wiring P2 anchor (2026-04-29) ===
+        # Mario judge-lane recognition (record-only).
+        # Source: ~/.hermes/SOUL.md:5,8,17-19,95 + super-mario-constitution-v1.md:65.
+        # Lane A Option A — Mario is the central control center governing
+        # Dev Chain / Learning Chain / Context Blocks. This block sets a
+        # metadata env var so downstream code can detect Mario without forcing
+        # a switch. Verdict-only behavior is shaped by the profile SOUL.md
+        # anchor block, not by this flag.
+        # Forbidden: editing this anchor outside Lane A packets that include
+        # this file in allowed_files.
+        if profile_name == "mario":
+            os.environ.setdefault("HERMES_LANE_ROLE", "judge")
+        # === end anchor ===
         # Strip the flag from argv so argparse doesn't choke
         if consume > 0:
             for i, arg in enumerate(argv):

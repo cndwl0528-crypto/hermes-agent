@@ -5348,6 +5348,9 @@ class GatewayRunner:
             self._reasoning_config = reasoning_config
             self._service_tier = self._load_service_tier()
             turn_route = self._resolve_turn_agent_config(prompt, model, runtime_kwargs)
+            from hermes_cli.lane_runtime import resolve_lane_kwargs
+            lane_kwargs = resolve_lane_kwargs("gateway_background", config=user_config)
+            agent_enabled_toolsets = None if lane_kwargs.get("lane_toolset_map") else enabled_toolsets
 
             def run_sync():
                 agent = AIAgent(
@@ -5356,7 +5359,7 @@ class GatewayRunner:
                     max_iterations=max_iterations,
                     quiet_mode=True,
                     verbose_logging=False,
-                    enabled_toolsets=enabled_toolsets,
+                    enabled_toolsets=agent_enabled_toolsets,
                     reasoning_config=reasoning_config,
                     service_tier=self._service_tier,
                     request_overrides=turn_route.get("request_overrides"),
@@ -5371,6 +5374,7 @@ class GatewayRunner:
                     user_id=source.user_id,
                     session_db=self._session_db,
                     fallback_model=self._fallback_model,
+                    **lane_kwargs,
                 )
 
                 return agent.run_conversation(
@@ -5514,6 +5518,8 @@ class GatewayRunner:
             reasoning_config = self._load_reasoning_config()
             self._service_tier = self._load_service_tier()
             turn_route = self._resolve_turn_agent_config(question, model, runtime_kwargs)
+            from hermes_cli.lane_runtime import resolve_lane_kwargs
+            lane_kwargs = resolve_lane_kwargs("gateway_btw", config=user_config)
             pr = self._provider_routing
 
             # Snapshot history from running agent or stored transcript
@@ -5554,6 +5560,7 @@ class GatewayRunner:
                     skip_memory=True,
                     skip_context_files=True,
                     persist_session=False,
+                    **lane_kwargs,
                 )
                 return agent.run_conversation(
                     user_message=btw_prompt,
@@ -7325,6 +7332,7 @@ class GatewayRunner:
         runtime: dict,
         enabled_toolsets: list,
         ephemeral_prompt: str,
+        lane_kwargs: dict | None = None,
     ) -> str:
         """Compute a stable string key from agent config values.
 
@@ -7353,6 +7361,7 @@ class GatewayRunner:
                 # reasoning_config excluded — it's set per-message on the
                 # cached agent and doesn't affect system prompt or tools.
                 ephemeral_prompt or "",
+                lane_kwargs or {},
             ],
             sort_keys=True,
             default=str,
@@ -7860,6 +7869,13 @@ class GatewayRunner:
                     logger.debug("interim_assistant_callback error: %s", _e)
 
             turn_route = self._resolve_turn_agent_config(message, model, runtime_kwargs)
+            from hermes_cli.lane_runtime import resolve_lane_kwargs
+            lane_kwargs = resolve_lane_kwargs(
+                "gateway",
+                config=user_config,
+                apply_model_map=session_key not in self._session_model_overrides,
+            )
+            agent_enabled_toolsets = None if lane_kwargs.get("lane_toolset_map") else enabled_toolsets
 
             # Check agent cache — reuse the AIAgent from the previous message
             # in this session to preserve the frozen system prompt and tool
@@ -7867,8 +7883,9 @@ class GatewayRunner:
             _sig = self._agent_config_signature(
                 turn_route["model"],
                 turn_route["runtime"],
-                enabled_toolsets,
+                agent_enabled_toolsets,
                 combined_ephemeral,
+                lane_kwargs,
             )
             agent = None
             _cache_lock = getattr(self, "_agent_cache_lock", None)
@@ -7888,7 +7905,7 @@ class GatewayRunner:
                     max_iterations=max_iterations,
                     quiet_mode=True,
                     verbose_logging=False,
-                    enabled_toolsets=enabled_toolsets,
+                    enabled_toolsets=agent_enabled_toolsets,
                     ephemeral_system_prompt=combined_ephemeral or None,
                     prefill_messages=self._prefill_messages or None,
                     reasoning_config=reasoning_config,
@@ -7905,6 +7922,7 @@ class GatewayRunner:
                     user_id=source.user_id,
                     session_db=self._session_db,
                     fallback_model=self._fallback_model,
+                    **lane_kwargs,
                 )
                 if _cache_lock and _cache is not None:
                     with _cache_lock:

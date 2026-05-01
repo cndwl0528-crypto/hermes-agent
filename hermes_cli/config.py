@@ -422,6 +422,11 @@ DEFAULT_CONFIG = {
         "max_simple_words": 28,
         "cheap_model": {},
     },
+    "lane_routing": {
+        "model_map": {},
+        "runtime_map": {},
+        "toolset_map": {},
+    },
     
     # Auxiliary model config — provider:model for each side task.
     # Format: provider is the provider name, model is the model slug.
@@ -2431,6 +2436,56 @@ def load_config() -> Dict[str, Any]:
             print(f"Warning: Failed to load config: {e}")
     
     return _expand_env_vars(_normalize_root_model_keys(_normalize_max_turns_config(config)))
+
+
+def get_lane_routing_config(config: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
+    """Return normalized lane-routing model/toolset maps from config.
+
+    The lane router is opt-in at the caller level. This helper only normalizes
+    config shape; it does not enable routing by itself.
+    """
+    source = config if config is not None else load_config()
+    lane_cfg = source.get("lane_routing") if isinstance(source, dict) else {}
+    if not isinstance(lane_cfg, dict):
+        lane_cfg = {}
+
+    model_map = lane_cfg.get("model_map")
+    if not isinstance(model_map, dict):
+        model_map = {}
+
+    raw_runtime_map = lane_cfg.get("runtime_map")
+    if not isinstance(raw_runtime_map, dict):
+        raw_runtime_map = {}
+
+    runtime_map: Dict[str, Dict[str, str]] = {}
+    allowed_runtime_keys = {"model", "provider", "base_url", "api_key", "api_mode"}
+    for lane_key, value in raw_runtime_map.items():
+        if not isinstance(value, dict):
+            continue
+        normalized = {
+            str(k): str(v)
+            for k, v in value.items()
+            if str(k) in allowed_runtime_keys and str(v).strip()
+        }
+        if normalized:
+            runtime_map[str(lane_key)] = normalized
+
+    raw_toolset_map = lane_cfg.get("toolset_map")
+    if not isinstance(raw_toolset_map, dict):
+        raw_toolset_map = {}
+
+    toolset_map: Dict[str, List[str]] = {}
+    for key, value in raw_toolset_map.items():
+        if isinstance(value, list):
+            toolset_map[str(key)] = [str(item) for item in value if str(item).strip()]
+        elif isinstance(value, str) and value.strip():
+            toolset_map[str(key)] = [item.strip() for item in value.split(",") if item.strip()]
+
+    return {
+        "model_map": {str(key): str(value) for key, value in model_map.items() if str(value).strip()},
+        "runtime_map": runtime_map,
+        "toolset_map": toolset_map,
+    }
 
 
 _SECURITY_COMMENT = """

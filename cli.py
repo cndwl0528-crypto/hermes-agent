@@ -1872,6 +1872,16 @@ class HermesCLI:
         filled = round((safe_percent / 100) * width)
         return f"[{('█' * filled) + ('░' * max(0, width - filled))}]"
 
+    def _display_model_name(self, model_name: str, *, max_len: int = 26) -> str:
+        display = (model_name or "unknown").split("/")[-1]
+        if display.endswith(".gguf"):
+            display = display[:-5]
+        if "gemma" in display.lower():
+            display = "local MLX"
+        if len(display) > max_len:
+            display = f"{display[: max_len - 3]}..."
+        return display
+
     def _get_status_bar_snapshot(self) -> Dict[str, Any]:
         # Prefer the agent's model name — it updates on fallback.
         # self.model reflects the originally configured model and never
@@ -1879,11 +1889,7 @@ class HermesCLI:
         # _try_activate_fallback() switches provider/model.
         agent = getattr(self, "agent", None)
         model_name = (getattr(agent, "model", None) or self.model or "unknown")
-        model_short = model_name.split("/")[-1] if "/" in model_name else model_name
-        if model_short.endswith(".gguf"):
-            model_short = model_short[:-5]
-        if len(model_short) > 26:
-            model_short = f"{model_short[:23]}..."
+        model_short = self._display_model_name(model_name, max_len=26)
 
         elapsed_seconds = max(0.0, (datetime.now() - self.session_start).total_seconds())
         snapshot = {
@@ -2058,7 +2064,7 @@ class HermesCLI:
             parts.append(duration_label)
             return self._trim_status_bar_text(" │ ".join(parts), width)
         except Exception:
-            return f"⚕ {self.model if getattr(self, 'model', None) else 'Hermes'}"
+            return f"⚕ {self._display_model_name(self.model) if getattr(self, 'model', None) else 'Hermes'}"
 
     def _get_status_bar_fragments(self):
         if not self._status_bar_visible or getattr(self, '_model_picker_state', None):
@@ -2865,6 +2871,8 @@ class HermesCLI:
                 "credential_pool": getattr(self, "_credential_pool", None),
             }
             effective_model = model_override or self.model
+            from hermes_cli.lane_runtime import resolve_lane_kwargs
+            lane_kwargs = resolve_lane_kwargs("cli")
             self.agent = AIAgent(
                 model=effective_model,
                 api_key=runtime.get("api_key"),
@@ -2905,6 +2913,7 @@ class HermesCLI:
                 tool_complete_callback=self._on_tool_complete if self._inline_diffs_enabled else None,
                 stream_delta_callback=self._stream_delta if self.streaming_enabled else None,
                 tool_gen_callback=self._on_tool_gen_start if self.streaming_enabled else None,
+                **lane_kwargs,
             )
             # Store reference for atexit memory provider shutdown
             global _active_agent_ref
@@ -3628,9 +3637,7 @@ class HermesCLI:
         tool_count = len(tools) if tools else 0
 
         # Format model name (shorten if needed)
-        model_short = self.model.split("/")[-1] if "/" in self.model else self.model
-        if len(model_short) > 30:
-            model_short = model_short[:27] + "..."
+        model_short = self._display_model_name(self.model, max_len=30)
 
         # Get API status indicator
         if self.api_key:
@@ -3939,7 +3946,7 @@ class HermesCLI:
         print("+" + "-" * width + "+")
         print()
         print("  -- Model --")
-        print(f"  Model:     {self.model}")
+        print(f"  Model:     {self._display_model_name(self.model, max_len=50)}")
         print(f"  Base URL:  {self.base_url}")
         print(f"  API Key:   {api_key_display}")
         print()
@@ -5662,6 +5669,19 @@ class HermesCLI:
             return
 
         prompt = parts[1].strip()
+        from hermes_cli.route_gate import deterministic_hermes_route_dispatch_packet
+
+        route_gate_packet = deterministic_hermes_route_dispatch_packet(prompt)
+        if route_gate_packet:
+            from hermes_cli.dispatch_outbox import write_route_dispatch_outbox_packet
+
+            outbox_path = write_route_dispatch_outbox_packet(route_gate_packet, prompt=prompt)
+            if outbox_path is not None:
+                route_gate_packet = {**route_gate_packet, "outbox_path": str(outbox_path)}
+            _cprint("  ✅ Background route gate complete")
+            _cprint(json.dumps(route_gate_packet, ensure_ascii=False, separators=(",", ":")))
+            return
+
         self._background_task_counter += 1
         task_num = self._background_task_counter
         task_id = f"bg_{datetime.now().strftime('%H%M%S')}_{uuid.uuid4().hex[:6]}"
@@ -5676,6 +5696,8 @@ class HermesCLI:
         _cprint("  You can continue chatting — results will appear when done.\n")
 
         turn_route = self._resolve_turn_agent_config(prompt)
+        from hermes_cli.lane_runtime import resolve_lane_kwargs
+        lane_kwargs = resolve_lane_kwargs("cli_background")
 
         def run_background():
             try:
@@ -5704,6 +5726,7 @@ class HermesCLI:
                     provider_require_parameters=self._provider_require_params,
                     provider_data_collection=self._provider_data_collection,
                     fallback_model=self._fallback_model,
+                    **lane_kwargs,
                 )
                 # Silence raw spinner; route thinking through TUI widget when no foreground agent is active.
                 bg_agent._print_fn = lambda *_a, **_kw: None
@@ -5810,6 +5833,8 @@ class HermesCLI:
             return
 
         turn_route = self._resolve_turn_agent_config(question)
+        from hermes_cli.lane_runtime import resolve_lane_kwargs
+        lane_kwargs = resolve_lane_kwargs("cli_btw")
         history_snapshot = list(self.conversation_history)
 
         preview = question[:60] + ("..." if len(question) > 60 else "")
@@ -5845,6 +5870,7 @@ class HermesCLI:
                     skip_memory=True,
                     skip_context_files=True,
                     persist_session=False,
+                    **lane_kwargs,
                 )
 
                 btw_prompt = (

@@ -1,0 +1,15 @@
+{
+  "stage": "packet_au_execution",
+  "packet": "AU",
+  "packet_label": "hermes_rs_model_layer_hierarchy_mapping",
+  "allowed_files": [
+    ".planning/active-plan.md",
+    ".planning/harness.json",
+    "/Users/maxmcair/.hermes/.env",
+    "/Users/maxmcair/.hermes/profiles/qwen27b/.env",
+    "/Users/maxmcair/.hermes/profiles/qwen27b/config.yaml",
+    "hermes_cli/lane_policy.py",
+    "tests/hermes_cli/test_lane_policy.py",
+    "docs/plans/2026-05-01-hermes-rust-upstream-compatibility.md"
+  ]
+}

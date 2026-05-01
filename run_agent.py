@@ -109,6 +109,316 @@ from agent.trajectory import (
 from utils import atomic_json_write, env_var_enabled
 
 
+DEFAULT_RUST_CONTEXT_PREVIEW_URL = "http://127.0.0.1:4319/context/pack-preview"
+DEFAULT_RUST_RUNTIME_CONTRACT_URL = "http://127.0.0.1:4319/runtime/compatibility-preview"
+DEFAULT_RUST_CHAT_PREVIEW_URL = "http://127.0.0.1:4319/hermes/chat-preview"
+DEFAULT_RUST_LANE_POLICY_URL = "http://127.0.0.1:4319/runtime/lane-select-preview"
+
+
+def _rust_context_preview_enabled() -> bool:
+    """Return True when Rust context packing should be requested.
+
+    HERMES_RUST_CONTEXT_PRIMARY is the promotion switch.  The older preview
+    flag remains as a compatibility alias for dry-run visibility.
+    """
+    return (
+        env_var_enabled("HERMES_RUST_CONTEXT_PRIMARY")
+        or env_var_enabled("HERMES_RUST_CONTEXT_PREVIEW")
+    )
+
+
+def _rust_context_apply_enabled() -> bool:
+    """Return True when Rust context packing may alter outgoing API messages.
+
+    Primary implies apply.  The older apply flag remains available for the
+    preview/apply two-switch rollout path.
+    """
+    return (
+        env_var_enabled("HERMES_RUST_CONTEXT_PRIMARY")
+        or env_var_enabled("HERMES_RUST_CONTEXT_APPLY")
+    )
+
+
+def _rust_runtime_contract_enabled() -> bool:
+    """Return True when Hermes should request the Rust runtime compatibility contract."""
+    return env_var_enabled("HERMES_RUST_RUNTIME_CONTRACT")
+
+
+def _rust_lane_policy_enabled() -> bool:
+    """Return True when Hermes should request Rust as the lane-policy authority."""
+    return env_var_enabled("HERMES_RUST_LANE_POLICY")
+
+
+def _rust_chat_preview_enabled() -> bool:
+    """Return True when Hermes may satisfy a plain chat turn through Rust.
+
+    HERMES_RUST_CHAT_PRIMARY is the promotion switch.  The older preview flag
+    remains as a compatibility alias while the Rust path is rolled forward.
+    """
+    return (
+        env_var_enabled("HERMES_RUST_CHAT_PRIMARY")
+        or env_var_enabled("HERMES_RUST_CHAT_PREVIEW")
+    )
+
+
+def _message_content_preview_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if content is None:
+        return ""
+    try:
+        return json.dumps(content, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        return str(content)
+
+
+def _context_segment_priority(role: str, index: int, total: int) -> tuple[int, bool]:
+    if role == "system":
+        return 255, True
+    if role == "user" and index == total - 1:
+        return 240, True
+    if role == "user":
+        return 150, False
+    if role == "assistant":
+        return 100, False
+    if role == "tool":
+        return 80, False
+    return 60, False
+
+
+def _build_rust_context_preview_payload(
+    api_messages: List[Dict[str, Any]],
+    *,
+    max_prompt_tokens: int,
+    reserved_response_tokens: int,
+) -> Dict[str, Any]:
+    segments = []
+    total = len(api_messages)
+    for index, message in enumerate(api_messages):
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role") or "unknown")
+        content_text = _message_content_preview_text(message.get("content"))
+        priority, required = _context_segment_priority(role, index, total)
+        segments.append({
+            "id": f"{index}:{role}",
+            "kind": role,
+            "priority": priority,
+            "required": required,
+            "content": content_text,
+            "estimated_tokens": estimate_tokens_rough(content_text),
+        })
+
+    return {
+        "budget": {
+            "max_prompt_tokens": max(0, int(max_prompt_tokens or 0)),
+            "reserved_response_tokens": max(0, int(reserved_response_tokens or 0)),
+        },
+        "segments": segments,
+    }
+
+
+def _request_rust_context_preview(
+    url: str,
+    payload: Dict[str, Any],
+    *,
+    timeout: float,
+    urlopen=None,
+) -> Dict[str, Any]:
+    import urllib.request
+
+    opener = urlopen or urllib.request.urlopen
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with opener(request, timeout=timeout) as response:
+        response_body = response.read()
+    return json.loads(response_body.decode("utf-8"))
+
+
+def _request_rust_runtime_contract(
+    url: str,
+    *,
+    session_id: Optional[str],
+    timeout: float,
+    urlopen=None,
+) -> Dict[str, Any]:
+    import urllib.request
+
+    opener = urlopen or urllib.request.urlopen
+    body = json.dumps({"session_id": session_id}).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with opener(request, timeout=timeout) as response:
+        response_body = response.read()
+    return json.loads(response_body.decode("utf-8"))
+
+
+def _request_rust_lane_policy(
+    url: str,
+    *,
+    stage: str,
+    node: Optional[str],
+    risk: Optional[str],
+    timeout: float,
+    urlopen=None,
+) -> Dict[str, Any]:
+    import urllib.request
+
+    opener = urlopen or urllib.request.urlopen
+    body = json.dumps({
+        "stage": stage,
+        "node": node,
+        "risk": risk,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with opener(request, timeout=timeout) as response:
+        response_body = response.read()
+    return json.loads(response_body.decode("utf-8"))
+
+
+def _build_rust_chat_preview_payload(
+    api_messages: List[Dict[str, Any]],
+    *,
+    session_id: Optional[str],
+    fallback_allowed: bool = True,
+    stream: bool = False,
+    max_new_tokens: Optional[int] = None,
+) -> Dict[str, Any]:
+    messages = []
+    for message in api_messages:
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role") or "user")
+        content = _message_content_preview_text(message.get("content")).strip()
+        if content:
+            messages.append({"role": role, "content": content})
+
+    payload: Dict[str, Any] = {
+        "session_id": session_id,
+        "messages": messages,
+        "mode": "chat",
+        "stream": bool(stream),
+        "fallback_allowed": bool(fallback_allowed),
+    }
+    if max_new_tokens is not None:
+        payload["max_new_tokens"] = max(1, int(max_new_tokens))
+    return payload
+
+
+def _request_rust_chat_preview(
+    url: str,
+    payload: Dict[str, Any],
+    *,
+    timeout: float,
+    urlopen=None,
+) -> Dict[str, Any]:
+    import urllib.request
+
+    opener = urlopen or urllib.request.urlopen
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with opener(request, timeout=timeout) as response:
+        response_body = response.read()
+    return json.loads(response_body.decode("utf-8"))
+
+
+def _messages_include_tool_transcript(api_messages: List[Dict[str, Any]]) -> bool:
+    for message in api_messages:
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "tool":
+            return True
+        if message.get("tool_calls"):
+            return True
+    return False
+
+
+def _rust_chat_preview_result_text(preview: Dict[str, Any]) -> Optional[str]:
+    if not isinstance(preview, dict):
+        return None
+    if preview.get("used_runtime") != "rust":
+        return None
+    if preview.get("fallback_reason"):
+        return None
+    text = preview.get("text")
+    if not isinstance(text, str):
+        return None
+    text = text.strip()
+    return text or None
+
+
+def _apply_rust_context_preview_packet(
+    api_messages: List[Dict[str, Any]],
+    preview: Dict[str, Any],
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Return API messages selected by the Rust context packet.
+
+    Tool transcripts are intentionally left untouched. Dropping only part of a
+    tool-call/result pair can make OpenAI-compatible APIs reject the request, so
+    the first applied mode only handles plain conversation context.
+    """
+    if not isinstance(preview, dict):
+        return api_messages, {"applied": False, "reason": "invalid_preview"}
+
+    packet = preview.get("packet")
+    if not isinstance(packet, dict):
+        return api_messages, {"applied": False, "reason": "missing_packet"}
+
+    if _messages_include_tool_transcript(api_messages):
+        return api_messages, {"applied": False, "reason": "tool_transcript_present"}
+
+    selected = packet.get("selected")
+    if not isinstance(selected, list):
+        return api_messages, {"applied": False, "reason": "missing_selected"}
+
+    selected_indexes = set()
+    for segment in selected:
+        if not isinstance(segment, dict):
+            continue
+        raw_id = str(segment.get("id") or "")
+        index_text = raw_id.split(":", 1)[0]
+        try:
+            index = int(index_text)
+        except ValueError:
+            continue
+        if 0 <= index < len(api_messages):
+            selected_indexes.add(index)
+
+    if not selected_indexes:
+        return api_messages, {"applied": False, "reason": "empty_selected"}
+
+    packed_messages = [
+        copy.deepcopy(message)
+        for index, message in enumerate(api_messages)
+        if index in selected_indexes
+    ]
+    return packed_messages, {
+        "applied": True,
+        "selected": len(packed_messages),
+        "dropped": max(0, len(api_messages) - len(packed_messages)),
+        "pressure": packet.get("pressure", "unknown"),
+    }
+
+
 
 class _SafeWriter:
     """Transparent stdio wrapper that catches OSError/ValueError from broken pipes.
@@ -604,6 +914,12 @@ class AIAgent:
         checkpoint_max_snapshots: int = 50,
         pass_session_id: bool = False,
         persist_session: bool = True,
+        lane_stage: str = None,
+        lane_node: str = None,
+        lane_risk: str = None,
+        lane_model_map: Dict[str, str] = None,
+        lane_runtime_map: Dict[str, Dict[str, str]] = None,
+        lane_toolset_map: Dict[str, List[str]] = None,
     ):
         """
         Initialize the AI Agent.
@@ -643,10 +959,97 @@ class AIAgent:
             skip_context_files (bool): If True, skip auto-injection of SOUL.md, AGENTS.md, and .cursorrules
                 into the system prompt. Use this for batch processing and data generation to avoid
                 polluting trajectories with user-specific persona or project instructions.
+            lane_stage: Optional Hermes lane-policy stage. When set, computes a lane decision.
+            lane_node: Optional node class for lane policy (air5, imac, air1). Defaults to air5.
+            lane_risk: Optional task risk for lane policy (low, medium, high). Defaults to low.
+            lane_model_map: Optional map from lane model class to concrete Hermes model id.
+            lane_runtime_map: Optional map from lane model class to runtime overrides.
+            lane_toolset_map: Optional map from lane toolset profile to concrete Hermes toolsets.
         """
         _install_safe_stdio()
 
         self.model = model
+        self.lane_decision = None
+        self.lane_policy = None
+        self.lane_policy_source = None
+        if lane_stage:
+            decision_model = None
+            decision_toolset = None
+
+            if _rust_lane_policy_enabled():
+                try:
+                    url = os.getenv("HERMES_RUST_LANE_POLICY_URL") or DEFAULT_RUST_LANE_POLICY_URL
+                    timeout = float(os.getenv("HERMES_RUST_LANE_POLICY_TIMEOUT", "0.35"))
+                    payload = _request_rust_lane_policy(
+                        url,
+                        stage=lane_stage,
+                        node=lane_node or "air5",
+                        risk=lane_risk or "low",
+                        timeout=timeout,
+                    )
+                    decision_payload = payload.get("decision") if isinstance(payload, dict) else None
+                    if not isinstance(decision_payload, dict):
+                        raise ValueError("Rust lane-policy response did not include decision")
+                    self.lane_decision = None
+                    self.lane_policy = dict(decision_payload)
+                    self.lane_policy_source = "rust"
+                    decision_model = self.lane_policy.get("model")
+                    decision_toolset = self.lane_policy.get("toolset")
+                except Exception as exc:
+                    self._last_rust_lane_policy = {"applied": False, "error": str(exc)}
+
+            if self.lane_policy is None:
+                from hermes_cli.lane_policy import IngressStage, LaneInput, NodeClass, TaskRisk, select_lane
+
+                decision = select_lane(
+                    LaneInput(
+                        stage=IngressStage(lane_stage),
+                        node=NodeClass(lane_node or "air5"),
+                        risk=TaskRisk(lane_risk or "low"),
+                    )
+                )
+                self.lane_decision = decision
+                self.lane_policy = decision.to_dict()
+                self.lane_policy_source = "python"
+                decision_model = decision.model.value
+                decision_toolset = decision.toolset.value
+            elif self.lane_policy_source == "rust":
+                self._last_rust_lane_policy = {"applied": True, "decision": self.lane_policy}
+
+            if lane_model_map is None and lane_runtime_map is None and lane_toolset_map is None:
+                try:
+                    from hermes_cli.config import get_lane_routing_config
+
+                    lane_config = get_lane_routing_config()
+                    lane_model_map = lane_config.get("model_map") or None
+                    lane_runtime_map = lane_config.get("runtime_map") or None
+                    lane_toolset_map = lane_config.get("toolset_map") or None
+                except Exception:
+                    pass
+
+            if lane_runtime_map:
+                runtime = lane_runtime_map.get(decision_model) or {}
+                if runtime.get("model"):
+                    self.model = runtime["model"]
+                if runtime.get("provider"):
+                    provider = runtime["provider"]
+                if runtime.get("base_url"):
+                    base_url = runtime["base_url"]
+                if runtime.get("api_key"):
+                    api_key = runtime["api_key"]
+                if runtime.get("api_mode"):
+                    api_mode = runtime["api_mode"]
+
+            if lane_model_map:
+                lane_model = lane_model_map.get(decision_model)
+                if lane_model:
+                    self.model = lane_model
+
+            if enabled_toolsets is None and lane_toolset_map:
+                lane_toolsets = lane_toolset_map.get(decision_toolset)
+                if lane_toolsets is not None:
+                    enabled_toolsets = list(lane_toolsets)
+
         self.max_iterations = max_iterations
         # Shared iteration budget — parent creates, children inherit.
         # Consumed by every LLM turn across parent + all subagents.
@@ -1760,6 +2163,167 @@ class AIAgent:
                 self.status_callback("lifecycle", message)
             except Exception:
                 logger.debug("status_callback error in _emit_status", exc_info=True)
+
+    def _maybe_preview_rust_context_budget(
+        self,
+        api_messages: List[Dict[str, Any]],
+        approx_tokens: int,
+    ) -> List[Dict[str, Any]]:
+        """Run the Rust context budgeter and optionally apply its selection.
+
+        Preview is disabled by default. Applying the packet requires the
+        additional HERMES_RUST_CONTEXT_APPLY opt-in and must fail open to the
+        original Hermes messages.
+        """
+        if not _rust_context_preview_enabled():
+            return api_messages
+
+        try:
+            url = (
+                os.getenv("HERMES_RUST_CONTEXT_PREVIEW_URL")
+                or DEFAULT_RUST_CONTEXT_PREVIEW_URL
+            ).strip()
+            if not url:
+                return api_messages
+
+            timeout = float(os.getenv("HERMES_RUST_CONTEXT_PREVIEW_TIMEOUT", "0.35"))
+            env_max_prompt = os.getenv("HERMES_RUST_CONTEXT_PREVIEW_MAX_PROMPT_TOKENS")
+            if env_max_prompt:
+                max_prompt_tokens = int(env_max_prompt)
+            else:
+                compressor = getattr(self, "context_compressor", None)
+                max_prompt_tokens = int(getattr(compressor, "context_length", 0) or 0)
+                if max_prompt_tokens <= 0:
+                    max_prompt_tokens = max(int(approx_tokens or 0), 1)
+
+            env_reserved = os.getenv("HERMES_RUST_CONTEXT_PREVIEW_RESERVED_RESPONSE_TOKENS")
+            if env_reserved:
+                reserved_response_tokens = int(env_reserved)
+            else:
+                reserved_response_tokens = int(getattr(self, "max_tokens", None) or 4096)
+
+            payload = _build_rust_context_preview_payload(
+                api_messages,
+                max_prompt_tokens=max_prompt_tokens,
+                reserved_response_tokens=reserved_response_tokens,
+            )
+            preview = _request_rust_context_preview(url, payload, timeout=timeout)
+            self._last_rust_context_preview = preview
+
+            packet = preview.get("packet", {}) if isinstance(preview, dict) else {}
+            selected = len(packet.get("selected") or [])
+            dropped = len(packet.get("dropped") or [])
+            pressure = packet.get("pressure", "unknown")
+            apply_result = {"applied": False, "reason": "disabled"}
+            packed_messages = api_messages
+            if _rust_context_apply_enabled():
+                packed_messages, apply_result = _apply_rust_context_preview_packet(api_messages, preview)
+                self._last_rust_context_apply = apply_result
+            else:
+                self._last_rust_context_apply = apply_result
+            logger.info(
+                "rust context preview: session=%s selected=%s dropped=%s pressure=%s approx_tokens=%s applied=%s",
+                self.session_id or "none",
+                selected,
+                dropped,
+                pressure,
+                approx_tokens,
+                apply_result.get("applied"),
+            )
+            if self.verbose_logging and not self.quiet_mode:
+                self._vprint(
+                    f"{self.log_prefix}   🦀 Rust context preview: "
+                    f"selected={selected}, dropped={dropped}, pressure={pressure}, "
+                    f"applied={apply_result.get('applied')}"
+                )
+            return packed_messages
+        except Exception as exc:
+            self._last_rust_context_preview = {"error": str(exc)}
+            self._last_rust_context_apply = {"applied": False, "reason": "error"}
+            logger.debug("rust context preview skipped: %s", exc, exc_info=True)
+            return api_messages
+
+    def _maybe_rust_runtime_contract_system_message(self) -> str:
+        """Fetch the shared Hermes/local inference/Candle/Devstral contract if enabled."""
+        if not _rust_runtime_contract_enabled():
+            return ""
+
+        try:
+            url = (
+                os.getenv("HERMES_RUST_RUNTIME_CONTRACT_URL")
+                or DEFAULT_RUST_RUNTIME_CONTRACT_URL
+            ).strip()
+            if not url:
+                return ""
+            timeout = float(os.getenv("HERMES_RUST_RUNTIME_CONTRACT_TIMEOUT", "0.35"))
+            payload = _request_rust_runtime_contract(
+                url,
+                session_id=self.session_id,
+                timeout=timeout,
+            )
+            self._last_rust_runtime_contract = payload
+            system_message = str(payload.get("system_message") or "").strip()
+            if self.verbose_logging and not self.quiet_mode and system_message:
+                self._vprint(f"{self.log_prefix}   🦀 Rust runtime contract: applied")
+            return system_message
+        except Exception as exc:
+            self._last_rust_runtime_contract = {"error": str(exc)}
+            logger.debug("rust runtime contract skipped: %s", exc, exc_info=True)
+            return ""
+
+    def _maybe_rust_chat_preview_response(
+        self,
+        api_messages: List[Dict[str, Any]],
+    ) -> Optional[str]:
+        """Return a Rust-generated plain chat response when explicitly enabled.
+
+        This path is intentionally narrower than the normal Hermes loop. Tool
+        turns stay on the Python/provider path so existing tool execution,
+        retries, and session semantics remain unchanged.
+        """
+        if not _rust_chat_preview_enabled():
+            return None
+        if self.tools or _messages_include_tool_transcript(api_messages):
+            self._last_rust_chat_preview = {
+                "applied": False,
+                "reason": "tools_or_transcript_present",
+            }
+            return None
+
+        try:
+            url = (
+                os.getenv("HERMES_RUST_CHAT_PREVIEW_URL")
+                or DEFAULT_RUST_CHAT_PREVIEW_URL
+            ).strip()
+            if not url:
+                return None
+            timeout = float(os.getenv("HERMES_RUST_CHAT_PREVIEW_TIMEOUT", "0.6"))
+            payload = _build_rust_chat_preview_payload(
+                api_messages,
+                session_id=self.session_id,
+                fallback_allowed=True,
+                stream=False,
+                max_new_tokens=getattr(self, "max_tokens", None),
+            )
+            if not payload["messages"]:
+                self._last_rust_chat_preview = {
+                    "applied": False,
+                    "reason": "empty_messages",
+                }
+                return None
+
+            preview = _request_rust_chat_preview(url, payload, timeout=timeout)
+            self._last_rust_chat_preview = preview
+            text = _rust_chat_preview_result_text(preview)
+            if not text:
+                return None
+            if self.verbose_logging and not self.quiet_mode:
+                self._vprint(f"{self.log_prefix}   🦀 Rust chat primary: applied")
+            return text
+        except Exception as exc:
+            self._last_rust_chat_preview = {"applied": False, "error": str(exc)}
+            logger.debug("rust chat preview skipped: %s", exc, exc_info=True)
+            return None
 
     def _current_main_runtime(self) -> Dict[str, str]:
         """Return the live main runtime for session-scoped auxiliary routing."""
@@ -8143,6 +8707,9 @@ class AIAgent:
             effective_system = active_system_prompt or ""
             if self.ephemeral_system_prompt:
                 effective_system = (effective_system + "\n\n" + self.ephemeral_system_prompt).strip()
+            runtime_contract_system = self._maybe_rust_runtime_contract_system_message()
+            if runtime_contract_system:
+                effective_system = (effective_system + "\n\n" + runtime_contract_system).strip()
             # NOTE: Plugin context from pre_llm_call hooks is injected into the
             # user message (see injection block above), NOT the system prompt.
             # This is intentional — system prompt modifications break the prompt
@@ -8203,6 +8770,16 @@ class AIAgent:
             # Calculate approximate request size for logging
             total_chars = sum(len(str(msg)) for msg in api_messages)
             approx_tokens = estimate_messages_tokens_rough(api_messages)
+            api_messages = self._maybe_preview_rust_context_budget(api_messages, approx_tokens)
+            total_chars = sum(len(str(msg)) for msg in api_messages)
+            approx_tokens = estimate_messages_tokens_rough(api_messages)
+            rust_chat_preview = self._maybe_rust_chat_preview_response(api_messages)
+            if rust_chat_preview:
+                final_response = rust_chat_preview
+                messages.append({"role": "assistant", "content": final_response})
+                self._response_was_previewed = True
+                _turn_exit_reason = "rust_chat_preview"
+                break
             
             # Thinking spinner for quiet mode (animated during API call)
             thinking_spinner = None

@@ -1,0 +1,3488 @@
+diff --git a/.planning/active-plan.md b/.planning/active-plan.md
+new file mode 100644
+index 000000000..ceca339c6
+--- /dev/null
++++ b/.planning/active-plan.md
+@@ -0,0 +1,210 @@
++## Event
++
++User fixed the layer model: 3B is the right router/state keeper. The working hierarchy is L1 Ministral 3B, L2 Ministral 8B, L3 SuperGemma 26B, L4 Devstral 24B.
++
++## Function
++
++Packet AU maps the layer decision into Hermes-rs/Hermes operational state:
++
++- record the model hierarchy in the Hermes compatibility plan.
++- adjust Python fallback lane policy so `worker_task` no longer collapses to 3B.
++- adjust active `mini` profile lane runtime so worker tasks can use SuperGemma.
++- update handoff/local notes and push only scoped repo files.
++
++Out of scope: adding a first-class Devstral enum to lane policy, broad test expansion, or changing upstream Hermes merge status.
++
++## Steps
++
++1. `discover` - completed
++   - active profile is `mini -> qwen27b`.
++   - Hermes-rs lane policy is active in the profile.
++   - current Python fallback maps `worker_task` to 3B, which conflicts with the new hierarchy.
++2. `implement` - in progress
++   - update fallback policy/test and active profile runtime map.
++   - record hierarchy in docs and handoff.
++3. `verify`
++   - targeted lane-policy tests.
++   - live active-profile AIAgent lane probe.
++   - diff hygiene.
++4. `closeout`
++   - commit/push scoped changes where possible and report local-only env/config separately.
++
++## Verify
++
++- `./venv/bin/python -m pytest tests/hermes_cli/test_lane_policy.py tests/run_agent/test_lane_policy_wiring.py -q`
++- active profile AIAgent probe with `HERMES_HOME=/Users/maxmcair/.hermes/profiles/qwen27b`
++- `git diff --check`
++
++## Closeout
++
++- `installed`: no install.
++- `applied in code`: pending hierarchy mapping.
++- `user-sealed decision`: 3B is Router/State Keeper; SuperGemma is worker; Devstral remains precision engineer.
++- `hold / excluded`: Devstral first-class lane enum and broad routing refactor.
++
++## Event
++
++User asked to proceed from the applied invariant and make the runtime actually use it. Binding requirement: Hermes-rs structure stays active while original Hermes assistant/update/plugin/session features remain preserved.
++
++## Function
++
++Packet AT enables the Hermes-rs lane-policy path locally and verifies only the required surfaces:
++
++- enable `HERMES_RUST_LANE_POLICY=1` in the local Hermes env.
++- keep Rust chat primary disabled unless explicitly promoted later.
++- verify bridge health, Hermes command surface, upstream watcher dry-run, and targeted lane-policy tests.
++
++Out of scope: enabling Rust plain-chat primary, merging upstream into main, modifying secrets, or running broad test suites.
++
++## Steps
++
++1. `discover` - completed
++   - current `.env` had no Hermes-rs lane-policy flag.
++   - config already maps lane runtime for `ministral_3b_instruct`.
++   - bridge is expected on `127.0.0.1:4319`.
++2. `implement` - in progress
++   - append bounded Hermes-rs lane-policy env settings.
++3. `verify`
++   - bridge health.
++   - Hermes command surface smoke.
++   - targeted lane-policy tests.
++   - upstream watcher dry-run.
++4. `closeout`
++   - report whether actual runtime is now enabled and what remains held.
++
++## Verify
++
++- `curl -sS http://127.0.0.1:4319/healthz`
++- `hermes --version`
++- `hermes --help`
++- `./venv/bin/python -m pytest tests/run_agent/test_lane_policy_wiring.py -q`
++- `./scripts/watch-hermes-upstream.sh --no-fetch --dry-run`
++
++## Closeout
++
++- `installed`: no install.
++- `applied in code`: pending env activation.
++- `user-sealed decision`: Hermes-rs lane-policy may be active; original Hermes assistant/update/plugin/session surfaces must remain available.
++- `hold / excluded`: Rust chat primary, upstream merge to main, Python Hermes removal, broad test expansion.
++
++## Event
++
++User clarified the core requirement: keep the Hermes-rs structure, preserve upstream update intake, and preserve original Hermes assistant features. This is binding.
++
++## Function
++
++Packet AS records the compatibility invariant in the upstream patch documentation:
++
++- Hermes-rs remains the Rust nervous-system lane for routing/context/model control.
++- Original Hermes remains the assistant/update/plugin/session feature surface unless a specific surface passes parity gates.
++- Upstream updates are not considered usable if they break original Hermes assistant features, even when Rust patches apply cleanly.
++
++Out of scope: merging upstream into main, adding new runtime behavior, changing provider/model credentials, or removing Python Hermes.
++
++## Steps
++
++1. `discover` - completed
++   - upstream patch README and compatibility guardrail already exist.
++   - watcher detects upstream changes and patch dry-run status.
++   - targeted Hermes-rs tests passed before this packet.
++2. `implement` - in progress
++   - add the preservation invariant to upstream patch docs.
++3. `verify`
++   - run markdown/diff hygiene for touched docs.
++4. `closeout`
++   - report the fixed invariant and next update path.
++
++## Verify
++
++- `git diff --check -- .planning/active-plan.md .planning/harness.json patches/hermes-upstream/README.md docs/plans/2026-05-01-hermes-rust-upstream-compatibility.md`
++
++## Closeout
++
++- `installed`: no install.
++- `applied in code`: pending documentation-only invariant update.
++- `user-sealed decision`: Hermes-rs structure + Hermes original assistant features + upstream update intake must be preserved together.
++- `hold / excluded`: upstream merge to main, Python Hermes removal, live provider/model credential changes.
++
++## Event
++
++User asked to continue Hermes Rustification. Binding decision: original Hermes behavior stays intact; Python remains a compatibility/fallback shim while Rust becomes the preferred local lane-policy authority.
++
++## Function
++
++Packet AR wires Hermes Python to optionally use the local Rust lane-policy endpoint:
++
++- add `HERMES_RUST_LANE_POLICY` switch.
++- request `/runtime/lane-select-preview` when enabled.
++- apply returned model/toolset/runtime map keys.
++- fail open to existing Python `hermes_cli.lane_policy`.
++- keep upstream patch watcher compatible.
++
++Out of scope: removing Python Hermes, rewriting the synchronous agent loop, enabling remote dispatch, or changing provider/model credentials.
++
++## Steps
++
++1. `discover` - completed
++   - `AIAgent` lane initialization already supports model/runtime/toolset maps.
++   - local Rust preview helpers already exist in `run_agent.py`.
++   - upstream watcher patch files must stay replayable.
++2. `implement` - completed
++   - added Rust lane-policy request helper and env switch.
++   - added `lane_policy_source`.
++   - added fallback test and Rust-primary wiring test.
++   - refreshed affected upstream patch files.
++3. `verify` - completed
++   - targeted Python tests passed.
++   - py_compile passed.
++   - upstream watcher dry-run passed.
++4. `closeout` - in progress
++   - report changed files and remaining gaps.
++
++## Verify
++
++- `/Users/maxmcair/hermes-agent/venv/bin/python -m py_compile /Users/maxmcair/hermes-agent/run_agent.py`
++- `/Users/maxmcair/hermes-agent/venv/bin/python -m pytest /Users/maxmcair/hermes-agent/tests/run_agent/test_lane_policy_wiring.py -q`
++- `/Users/maxmcair/hermes-agent/scripts/watch-hermes-upstream.sh --no-fetch --dry-run`
++- `git diff --check -- run_agent.py tests/run_agent/test_lane_policy_wiring.py`
++
++## Closeout
++
++- `installed`: no install.
++- `applied in code`: optional Rust lane-policy primary path with Python fallback.
++- `user-sealed decision`: Hermes Rustification proceeds without breaking original Hermes update compatibility.
++- `hold / excluded`: full Python rewrite/removal, live dispatch execution, provider credential changes.
++
++## Event
++
++User asked to continue after local route outbox anchoring landed. Binding decision: the next packet may strengthen Mario review evidence, but remote SSH dispatch and Mario ingestion remain held.
++
++## Function
++
++Packet AQ enriches local route outbox packets with Mario review envelope fields:
++
++- `target_authority=imac_mario`
++- `raw_child_data=false`
++- `privacy_class=operator_route_packet`
++- preflight evidence placeholders for route plan/export boundary/expected receipt
++
++Out of scope: SSH dispatch execution, Mario judgment ingestion, Rust tool execution, gateway/CLI rewrite, and Memory Palace promotion.
++
++## Steps
++
++1. implement: enrich saved outbox packets with Mario review envelope metadata.
++2. test: assert envelope fields are present in saved JSON and credential-free short-circuit remains.
++3. verify: run targeted route gate tests and diff hygiene.
++4. closeout: record Mario review envelope state.
++
++## Verify
++
++Target checks:
++
++- `./venv/bin/python -m pytest tests/hermes_cli/test_background_route_gate.py -q`
++- `git diff --check -- .planning/active-plan.md .planning/harness.json hermes_cli/dispatch_outbox.py tests/hermes_cli/test_background_route_gate.py`
++
++## Closeout
++
++- installed: none
++- applied in code: saved outbox packets now include Mario review envelope fields and targeted file assertions cover them
++- user-sealed decision: Mario review envelope evidence is allowed; remote dispatch remains held
++- hold / excluded: SSH dispatch execution, Mario judgment ingestion, Memory Palace promotion
+diff --git a/.planning/harness.json b/.planning/harness.json
+new file mode 100644
+index 000000000..55e6610ab
+--- /dev/null
++++ b/.planning/harness.json
+@@ -0,0 +1,15 @@
++{
++  "stage": "packet_au_execution",
++  "packet": "AU",
++  "packet_label": "hermes_rs_model_layer_hierarchy_mapping",
++  "allowed_files": [
++    ".planning/active-plan.md",
++    ".planning/harness.json",
++    "/Users/maxmcair/.hermes/.env",
++    "/Users/maxmcair/.hermes/profiles/qwen27b/.env",
++    "/Users/maxmcair/.hermes/profiles/qwen27b/config.yaml",
++    "hermes_cli/lane_policy.py",
++    "tests/hermes_cli/test_lane_policy.py",
++    "docs/plans/2026-05-01-hermes-rust-upstream-compatibility.md"
++  ]
++}
+diff --git a/cli.py b/cli.py
+index b278e2cfc..7007c3610 100644
+--- a/cli.py
++++ b/cli.py
+@@ -1872,6 +1872,16 @@ class HermesCLI:
+         filled = round((safe_percent / 100) * width)
+         return f"[{('█' * filled) + ('░' * max(0, width - filled))}]"
+ 
++    def _display_model_name(self, model_name: str, *, max_len: int = 26) -> str:
++        display = (model_name or "unknown").split("/")[-1]
++        if display.endswith(".gguf"):
++            display = display[:-5]
++        if "gemma" in display.lower():
++            display = "local MLX"
++        if len(display) > max_len:
++            display = f"{display[: max_len - 3]}..."
++        return display
++
+     def _get_status_bar_snapshot(self) -> Dict[str, Any]:
+         # Prefer the agent's model name — it updates on fallback.
+         # self.model reflects the originally configured model and never
+@@ -1879,11 +1889,7 @@ class HermesCLI:
+         # _try_activate_fallback() switches provider/model.
+         agent = getattr(self, "agent", None)
+         model_name = (getattr(agent, "model", None) or self.model or "unknown")
+-        model_short = model_name.split("/")[-1] if "/" in model_name else model_name
+-        if model_short.endswith(".gguf"):
+-            model_short = model_short[:-5]
+-        if len(model_short) > 26:
+-            model_short = f"{model_short[:23]}..."
++        model_short = self._display_model_name(model_name, max_len=26)
+ 
+         elapsed_seconds = max(0.0, (datetime.now() - self.session_start).total_seconds())
+         snapshot = {
+@@ -2058,7 +2064,7 @@ class HermesCLI:
+             parts.append(duration_label)
+             return self._trim_status_bar_text(" │ ".join(parts), width)
+         except Exception:
+-            return f"⚕ {self.model if getattr(self, 'model', None) else 'Hermes'}"
++            return f"⚕ {self._display_model_name(self.model) if getattr(self, 'model', None) else 'Hermes'}"
+ 
+     def _get_status_bar_fragments(self):
+         if not self._status_bar_visible or getattr(self, '_model_picker_state', None):
+@@ -2865,6 +2871,8 @@ class HermesCLI:
+                 "credential_pool": getattr(self, "_credential_pool", None),
+             }
+             effective_model = model_override or self.model
++            from hermes_cli.lane_runtime import resolve_lane_kwargs
++            lane_kwargs = resolve_lane_kwargs("cli")
+             self.agent = AIAgent(
+                 model=effective_model,
+                 api_key=runtime.get("api_key"),
+@@ -2905,6 +2913,7 @@ class HermesCLI:
+                 tool_complete_callback=self._on_tool_complete if self._inline_diffs_enabled else None,
+                 stream_delta_callback=self._stream_delta if self.streaming_enabled else None,
+                 tool_gen_callback=self._on_tool_gen_start if self.streaming_enabled else None,
++                **lane_kwargs,
+             )
+             # Store reference for atexit memory provider shutdown
+             global _active_agent_ref
+@@ -3628,9 +3637,7 @@ class HermesCLI:
+         tool_count = len(tools) if tools else 0
+ 
+         # Format model name (shorten if needed)
+-        model_short = self.model.split("/")[-1] if "/" in self.model else self.model
+-        if len(model_short) > 30:
+-            model_short = model_short[:27] + "..."
++        model_short = self._display_model_name(self.model, max_len=30)
+ 
+         # Get API status indicator
+         if self.api_key:
+@@ -3939,7 +3946,7 @@ class HermesCLI:
+         print("+" + "-" * width + "+")
+         print()
+         print("  -- Model --")
+-        print(f"  Model:     {self.model}")
++        print(f"  Model:     {self._display_model_name(self.model, max_len=50)}")
+         print(f"  Base URL:  {self.base_url}")
+         print(f"  API Key:   {api_key_display}")
+         print()
+@@ -5662,6 +5669,19 @@ class HermesCLI:
+             return
+ 
+         prompt = parts[1].strip()
++        from hermes_cli.route_gate import deterministic_hermes_route_dispatch_packet
++
++        route_gate_packet = deterministic_hermes_route_dispatch_packet(prompt)
++        if route_gate_packet:
++            from hermes_cli.dispatch_outbox import write_route_dispatch_outbox_packet
++
++            outbox_path = write_route_dispatch_outbox_packet(route_gate_packet, prompt=prompt)
++            if outbox_path is not None:
++                route_gate_packet = {**route_gate_packet, "outbox_path": str(outbox_path)}
++            _cprint("  ✅ Background route gate complete")
++            _cprint(json.dumps(route_gate_packet, ensure_ascii=False, separators=(",", ":")))
++            return
++
+         self._background_task_counter += 1
+         task_num = self._background_task_counter
+         task_id = f"bg_{datetime.now().strftime('%H%M%S')}_{uuid.uuid4().hex[:6]}"
+@@ -5676,6 +5696,8 @@ class HermesCLI:
+         _cprint("  You can continue chatting — results will appear when done.\n")
+ 
+         turn_route = self._resolve_turn_agent_config(prompt)
++        from hermes_cli.lane_runtime import resolve_lane_kwargs
++        lane_kwargs = resolve_lane_kwargs("cli_background")
+ 
+         def run_background():
+             try:
+@@ -5704,6 +5726,7 @@ class HermesCLI:
+                     provider_require_parameters=self._provider_require_params,
+                     provider_data_collection=self._provider_data_collection,
+                     fallback_model=self._fallback_model,
++                    **lane_kwargs,
+                 )
+                 # Silence raw spinner; route thinking through TUI widget when no foreground agent is active.
+                 bg_agent._print_fn = lambda *_a, **_kw: None
+@@ -5810,6 +5833,8 @@ class HermesCLI:
+             return
+ 
+         turn_route = self._resolve_turn_agent_config(question)
++        from hermes_cli.lane_runtime import resolve_lane_kwargs
++        lane_kwargs = resolve_lane_kwargs("cli_btw")
+         history_snapshot = list(self.conversation_history)
+ 
+         preview = question[:60] + ("..." if len(question) > 60 else "")
+@@ -5845,6 +5870,7 @@ class HermesCLI:
+                     skip_memory=True,
+                     skip_context_files=True,
+                     persist_session=False,
++                    **lane_kwargs,
+                 )
+ 
+                 btw_prompt = (
+diff --git a/docs/plans/2026-05-01-hermes-rust-upstream-compatibility.md b/docs/plans/2026-05-01-hermes-rust-upstream-compatibility.md
+new file mode 100644
+index 000000000..c801f68ff
+--- /dev/null
++++ b/docs/plans/2026-05-01-hermes-rust-upstream-compatibility.md
+@@ -0,0 +1,101 @@
++# Hermes Rust Upstream Compatibility Guardrail
++
++Date: 2026-05-01
++
++## Decision
++
++Complete Rust transition is allowed, but it must not mean losing Hermes upstream updates.
++
++The fixed invariant is:
++
++- keep the Hermes-rs nervous-system structure;
++- keep upstream update intake alive;
++- keep original Hermes assistant features alive.
++
++These three conditions are one compatibility gate. Passing only the Rust patch
++dry-run is not enough if the update breaks the original Hermes chat, update,
++plugin, memory, session, gateway, or assistant-style CLI surface.
++
++Python Hermes stays as:
++
++- upstream sync source
++- behavior reference
++- fallback runtime
++- parity test oracle
++
++Rust Hermes becomes:
++
++- execution owner for approved hot paths
++- context/runtime contract owner
++- route/dispatch owner after parity gates pass
++
++## Upstream Sync Ledger
++
++Every upstream Hermes update is classified before merge:
++
++| Class | Action |
++| --- | --- |
++| Security/auth/session persistence | merge or port before Rust promotion continues |
++| Provider API compatibility | port to Rust adapter or keep Python fallback active |
++| Tool execution behavior | keep Python authoritative until Rust tool executor is proven |
++| CLI/TUI/gateway UX | merge Python-side unless it conflicts with Rust-owned contracts |
++| Prompt/context policy | compare against Rust contract, then port intentionally |
++| Cosmetic/docs-only | merge normally |
++
++Do not treat an upstream update as applied to Rust until the matching parity row below is checked.
++
++Do not treat an upstream update as accepted for local use until the original
++Hermes assistant surface still works. Hermes-rs may take over hot paths, but it
++does not silently delete upstream behavior.
++
++## Feature Parity Checklist
++
++| Surface | Current owner | Rust owner target | Gate |
++| --- | --- | --- | --- |
++| Plain chat response | Python primary, Rust opt-in preview | Rust primary | fallback test + live smoke |
++| Context packing | Python primary, Rust preview/apply opt-in | Rust primary | transcript safety + token budget tests |
++| Runtime contract | Rust preview | Rust primary | deterministic system-message contract |
++| Provider fallback | Python | Python until later | no regression in fallback chain |
++| Tool execution | Python | later Rust executor | tool transcript invariants proven |
++| Session persistence | Python | later shared store | no lost assistant/user turns |
++| Gateway/CLI | Python | later adapter shell | UX and plugin hooks preserved |
++
++## Promotion Rule
++
++A surface can move from Python primary to Rust primary only when:
++
++1. Rust has deterministic tests for the surface.
++2. Python fallback still works when Rust is disabled or unavailable.
++3. Upstream Hermes changes for that surface are classified in this ledger.
++4. The migration does not bypass Hermes tool/session/plugin semantics.
++
++## Fallback Rule
++
++Rust failure must be boring:
++
++- timeout: continue Python path
++- endpoint down: continue Python path
++- Rust response with `fallback_reason`: continue Python path
++- tool transcript present: continue Python path
++- tool definitions active: continue Python path
++
++This keeps upstream updates useful while Rust ownership expands.
++
++## Model Layer Hierarchy
++
++The active Hermes-rs hierarchy is:
++
++| Layer | Model | Primary task | Strategic reason |
++| --- | --- | --- | --- |
++| L1 Gateway / State Keeper | Ministral 3B | intent classification, routing, state summary, simple CLI judgment | fastest always-on path; correct home for lane policy and state recall |
++| L2 Planner | Ministral 8B | work planning, document reference, prompt shaping, medium reasoning | better judgment than 3B without Devstral-level cost |
++| L3 Worker / Synthesizer | SuperGemma 26B | sustained work, comparison, synthesis, structured outputs | high throughput for its size; best default work lane |
++| L4 Precision Engineer | Devstral 24B | complex code, debugging, deep review, reasoning-heavy patches | slower but reserved for precise coding and difficult failures |
++
++Operational mapping:
++
++- `normal_turn` stays on the 3B router/state lane.
++- `worker_task` maps to the worker model class and the active profile may bind
++  that class to SuperGemma.
++- Devstral remains on-demand until a first-class precision-engineer lane is
++  added to the policy enum.
+diff --git a/gateway/run.py b/gateway/run.py
+index ebaa0447b..422c7b69e 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -5348,6 +5348,9 @@ class GatewayRunner:
+             self._reasoning_config = reasoning_config
+             self._service_tier = self._load_service_tier()
+             turn_route = self._resolve_turn_agent_config(prompt, model, runtime_kwargs)
++            from hermes_cli.lane_runtime import resolve_lane_kwargs
++            lane_kwargs = resolve_lane_kwargs("gateway_background", config=user_config)
++            agent_enabled_toolsets = None if lane_kwargs.get("lane_toolset_map") else enabled_toolsets
+ 
+             def run_sync():
+                 agent = AIAgent(
+@@ -5356,7 +5359,7 @@ class GatewayRunner:
+                     max_iterations=max_iterations,
+                     quiet_mode=True,
+                     verbose_logging=False,
+-                    enabled_toolsets=enabled_toolsets,
++                    enabled_toolsets=agent_enabled_toolsets,
+                     reasoning_config=reasoning_config,
+                     service_tier=self._service_tier,
+                     request_overrides=turn_route.get("request_overrides"),
+@@ -5371,6 +5374,7 @@ class GatewayRunner:
+                     user_id=source.user_id,
+                     session_db=self._session_db,
+                     fallback_model=self._fallback_model,
++                    **lane_kwargs,
+                 )
+ 
+                 return agent.run_conversation(
+@@ -5514,6 +5518,8 @@ class GatewayRunner:
+             reasoning_config = self._load_reasoning_config()
+             self._service_tier = self._load_service_tier()
+             turn_route = self._resolve_turn_agent_config(question, model, runtime_kwargs)
++            from hermes_cli.lane_runtime import resolve_lane_kwargs
++            lane_kwargs = resolve_lane_kwargs("gateway_btw", config=user_config)
+             pr = self._provider_routing
+ 
+             # Snapshot history from running agent or stored transcript
+@@ -5554,6 +5560,7 @@ class GatewayRunner:
+                     skip_memory=True,
+                     skip_context_files=True,
+                     persist_session=False,
++                    **lane_kwargs,
+                 )
+                 return agent.run_conversation(
+                     user_message=btw_prompt,
+@@ -7325,6 +7332,7 @@ class GatewayRunner:
+         runtime: dict,
+         enabled_toolsets: list,
+         ephemeral_prompt: str,
++        lane_kwargs: dict | None = None,
+     ) -> str:
+         """Compute a stable string key from agent config values.
+ 
+@@ -7353,6 +7361,7 @@ class GatewayRunner:
+                 # reasoning_config excluded — it's set per-message on the
+                 # cached agent and doesn't affect system prompt or tools.
+                 ephemeral_prompt or "",
++                lane_kwargs or {},
+             ],
+             sort_keys=True,
+             default=str,
+@@ -7860,6 +7869,13 @@ class GatewayRunner:
+                     logger.debug("interim_assistant_callback error: %s", _e)
+ 
+             turn_route = self._resolve_turn_agent_config(message, model, runtime_kwargs)
++            from hermes_cli.lane_runtime import resolve_lane_kwargs
++            lane_kwargs = resolve_lane_kwargs(
++                "gateway",
++                config=user_config,
++                apply_model_map=session_key not in self._session_model_overrides,
++            )
++            agent_enabled_toolsets = None if lane_kwargs.get("lane_toolset_map") else enabled_toolsets
+ 
+             # Check agent cache — reuse the AIAgent from the previous message
+             # in this session to preserve the frozen system prompt and tool
+@@ -7867,8 +7883,9 @@ class GatewayRunner:
+             _sig = self._agent_config_signature(
+                 turn_route["model"],
+                 turn_route["runtime"],
+-                enabled_toolsets,
++                agent_enabled_toolsets,
+                 combined_ephemeral,
++                lane_kwargs,
+             )
+             agent = None
+             _cache_lock = getattr(self, "_agent_cache_lock", None)
+@@ -7888,7 +7905,7 @@ class GatewayRunner:
+                     max_iterations=max_iterations,
+                     quiet_mode=True,
+                     verbose_logging=False,
+-                    enabled_toolsets=enabled_toolsets,
++                    enabled_toolsets=agent_enabled_toolsets,
+                     ephemeral_system_prompt=combined_ephemeral or None,
+                     prefill_messages=self._prefill_messages or None,
+                     reasoning_config=reasoning_config,
+@@ -7905,6 +7922,7 @@ class GatewayRunner:
+                     user_id=source.user_id,
+                     session_db=self._session_db,
+                     fallback_model=self._fallback_model,
++                    **lane_kwargs,
+                 )
+                 if _cache_lock and _cache is not None:
+                     with _cache_lock:
+diff --git a/hermes_cli/config.py b/hermes_cli/config.py
+index 657d02c2c..aa794ad6a 100644
+--- a/hermes_cli/config.py
++++ b/hermes_cli/config.py
+@@ -422,6 +422,11 @@ DEFAULT_CONFIG = {
+         "max_simple_words": 28,
+         "cheap_model": {},
+     },
++    "lane_routing": {
++        "model_map": {},
++        "runtime_map": {},
++        "toolset_map": {},
++    },
+     
+     # Auxiliary model config — provider:model for each side task.
+     # Format: provider is the provider name, model is the model slug.
+@@ -2433,6 +2438,56 @@ def load_config() -> Dict[str, Any]:
+     return _expand_env_vars(_normalize_root_model_keys(_normalize_max_turns_config(config)))
+ 
+ 
++def get_lane_routing_config(config: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
++    """Return normalized lane-routing model/toolset maps from config.
++
++    The lane router is opt-in at the caller level. This helper only normalizes
++    config shape; it does not enable routing by itself.
++    """
++    source = config if config is not None else load_config()
++    lane_cfg = source.get("lane_routing") if isinstance(source, dict) else {}
++    if not isinstance(lane_cfg, dict):
++        lane_cfg = {}
++
++    model_map = lane_cfg.get("model_map")
++    if not isinstance(model_map, dict):
++        model_map = {}
++
++    raw_runtime_map = lane_cfg.get("runtime_map")
++    if not isinstance(raw_runtime_map, dict):
++        raw_runtime_map = {}
++
++    runtime_map: Dict[str, Dict[str, str]] = {}
++    allowed_runtime_keys = {"model", "provider", "base_url", "api_key", "api_mode"}
++    for lane_key, value in raw_runtime_map.items():
++        if not isinstance(value, dict):
++            continue
++        normalized = {
++            str(k): str(v)
++            for k, v in value.items()
++            if str(k) in allowed_runtime_keys and str(v).strip()
++        }
++        if normalized:
++            runtime_map[str(lane_key)] = normalized
++
++    raw_toolset_map = lane_cfg.get("toolset_map")
++    if not isinstance(raw_toolset_map, dict):
++        raw_toolset_map = {}
++
++    toolset_map: Dict[str, List[str]] = {}
++    for key, value in raw_toolset_map.items():
++        if isinstance(value, list):
++            toolset_map[str(key)] = [str(item) for item in value if str(item).strip()]
++        elif isinstance(value, str) and value.strip():
++            toolset_map[str(key)] = [item.strip() for item in value.split(",") if item.strip()]
++
++    return {
++        "model_map": {str(key): str(value) for key, value in model_map.items() if str(value).strip()},
++        "runtime_map": runtime_map,
++        "toolset_map": toolset_map,
++    }
++
++
+ _SECURITY_COMMENT = """
+ # ── Security ──────────────────────────────────────────────────────────
+ # API keys, tokens, and passwords are redacted from tool output by default.
+diff --git a/hermes_cli/dispatch_outbox.py b/hermes_cli/dispatch_outbox.py
+new file mode 100644
+index 000000000..cb1bf34b3
+--- /dev/null
++++ b/hermes_cli/dispatch_outbox.py
+@@ -0,0 +1,77 @@
++"""Local dispatch outbox helpers for governed Hermes route packets."""
++
++from __future__ import annotations
++
++import hashlib
++import os
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, Optional
++
++from hermes_constants import get_hermes_home
++from utils import atomic_json_write, env_var_enabled
++
++
++def route_dispatch_outbox_enabled() -> bool:
++    """Return True when route packets should be written to the local outbox."""
++    return not env_var_enabled("HERMES_ROUTE_DISPATCH_OUTBOX_DISABLED")
++
++
++def route_dispatch_outbox_dir() -> Path:
++    configured = os.getenv("HERMES_ROUTE_DISPATCH_OUTBOX_DIR")
++    if configured:
++        return Path(configured).expanduser()
++    return get_hermes_home() / "agent-floor" / "packets" / "outbox" / "hermes" / "open"
++
++
++def write_route_dispatch_outbox_packet(
++    packet: Dict[str, Any],
++    *,
++    prompt: str,
++    now: Optional[datetime] = None,
++) -> Optional[Path]:
++    """Write a canonical route packet to the local outbox and return its path.
++
++    This only creates local evidence. It does not perform remote SSH dispatch or
++    Memory Palace admission.
++    """
++    if not route_dispatch_outbox_enabled():
++        return None
++
++    timestamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
++    stamp = timestamp.strftime("%Y%m%dT%H%M%SZ")
++    digest = hashlib.sha256(
++        f"{stamp}\n{packet.get('route', '')}\n{packet.get('reason', '')}\n{prompt}".encode("utf-8")
++    ).hexdigest()[:12]
++    dispatch_id = f"hermes_route_{stamp}_{digest}"
++    output_packet = dict(packet)
++    output_packet.update({
++        "dispatch_id": dispatch_id,
++        "created_at": timestamp.isoformat().replace("+00:00", "Z"),
++        "outbox_owner": "hermes",
++        "target_authority": "imac_mario",
++        "target_node": "imac",
++        "raw_child_data": False,
++        "privacy_class": "operator_route_packet",
++        "export_boundary": "route_metadata_only",
++        "route_plan": {
++            "route": packet.get("route"),
++            "escalation": packet.get("escalation"),
++            "source": packet.get("source"),
++        },
++        "expected_receipt": {
++            "required": True,
++            "fields": [
++                "dispatch_id",
++                "status",
++                "target_node",
++                "job_class",
++                "output_ref",
++                "output_sha256",
++                "raw_child_data",
++            ],
++        },
++    })
++    path = route_dispatch_outbox_dir() / f"{dispatch_id}.json"
++    atomic_json_write(path, output_packet, indent=2)
++    return path
+diff --git a/hermes_cli/lane_policy.py b/hermes_cli/lane_policy.py
+new file mode 100644
+index 000000000..28c4ca539
+--- /dev/null
++++ b/hermes_cli/lane_policy.py
+@@ -0,0 +1,289 @@
++"""Hermes lane/model/cache/toolset selection policy.
++
++This mirrors the Rust `runtime-core::lane` contract so Python Hermes can adopt
++the runtime router incrementally before direct Rust integration is wired.
++"""
++
++from __future__ import annotations
++
++from dataclasses import asdict, dataclass
++from enum import StrEnum
++from typing import Any
++
++
++class IngressStage(StrEnum):
++    INGRESS_CLASSIFY = "ingress_classify"
++    ROUTE_PLAN = "route_plan"
++    NORMAL_TURN = "normal_turn"
++    WORKER_TASK = "worker_task"
++    DIAGNOSE = "diagnose"
++    COMPLEX_PLAN = "complex_plan"
++    PATCH_GENERATE = "patch_generate"
++    VERIFY = "verify"
++    CLOSEOUT = "closeout"
++    USER_RENDER = "user_render"
++
++
++class HermesLane(StrEnum):
++    GENERAL = "general"
++    REASONING = "reasoning"
++    RUNTIME = "runtime"
++    RENDER = "render"
++
++
++class ModelClass(StrEnum):
++    NONE = "none"
++    MINISTRAL_3B_INSTRUCT = "ministral_3b_instruct"
++    MINISTRAL_3B_REASONING = "ministral_3b_reasoning"
++    MINISTRAL_8B_INSTRUCT = "ministral_8b_instruct"
++    MINISTRAL_8B_REASONING = "ministral_8b_reasoning"
++
++
++class NodeClass(StrEnum):
++    AIR5 = "air5"
++    IMAC = "imac"
++    AIR1 = "air1"
++
++
++class TaskRisk(StrEnum):
++    LOW = "low"
++    MEDIUM = "medium"
++    HIGH = "high"
++
++
++class CacheProfile(StrEnum):
++    NONE = "none"
++    SHORT_PREFIX = "short_prefix"
++    ROUTING = "routing"
++    HOT_SESSION = "hot_session"
++    SMALL_WORKER = "small_worker"
++    FAILURE = "failure"
++    EXPANDED = "expanded"
++    ALLOWED_FILES = "allowed_files"
++    SUMMARY = "summary"
++    PERSONA = "persona"
++
++
++class ToolsetProfile(StrEnum):
++    NONE = "none"
++    MINIMAL = "minimal"
++    ROUTE_ONLY = "route_only"
++    SELECTED = "selected"
++    RESTRICTED_WORKER = "restricted_worker"
++    READ_ONLY = "read_only"
++    REPO_READ_ONLY = "repo_read_only"
++    FILE_PATCH = "file_patch"
++    TERMINAL_VERIFY = "terminal_verify"
++
++
++class PersonaProfile(StrEnum):
++    NONE = "none"
++    MINIMAL = "minimal"
++    ALICE_CANONICAL = "alice_canonical"
++
++
++@dataclass(frozen=True)
++class LaneInput:
++    stage: IngressStage
++    node: NodeClass
++    risk: TaskRisk
++
++
++@dataclass(frozen=True)
++class LaneDecision:
++    lane: HermesLane
++    model: ModelClass
++    target_node: NodeClass
++    cache: CacheProfile
++    toolset: ToolsetProfile
++    persona: PersonaProfile
++    runtime_first: bool
++    escalate: bool
++
++    def to_dict(self) -> dict[str, Any]:
++        return asdict(self)
++
++
++def select_lane(lane_input: LaneInput) -> LaneDecision:
++    stage = lane_input.stage
++    node = lane_input.node
++    risk = lane_input.risk
++
++    if stage == IngressStage.INGRESS_CLASSIFY:
++        return LaneDecision(
++            lane=HermesLane.GENERAL,
++            model=ModelClass.MINISTRAL_3B_INSTRUCT,
++            target_node=node,
++            cache=CacheProfile.SHORT_PREFIX,
++            toolset=ToolsetProfile.MINIMAL,
++            persona=PersonaProfile.NONE,
++            runtime_first=False,
++            escalate=False,
++        )
++
++    if stage == IngressStage.ROUTE_PLAN:
++        return LaneDecision(
++            lane=HermesLane.GENERAL,
++            model=_instruct_model_for_node(node),
++            target_node=node,
++            cache=CacheProfile.ROUTING,
++            toolset=ToolsetProfile.ROUTE_ONLY,
++            persona=PersonaProfile.NONE,
++            runtime_first=False,
++            escalate=False,
++        )
++
++    if stage == IngressStage.NORMAL_TURN:
++        return LaneDecision(
++            lane=HermesLane.GENERAL,
++            model=_instruct_model_for_node(node),
++            target_node=node,
++            cache=CacheProfile.HOT_SESSION,
++            toolset=ToolsetProfile.SELECTED,
++            persona=PersonaProfile.MINIMAL,
++            runtime_first=False,
++            escalate=False,
++        )
++
++    if stage == IngressStage.WORKER_TASK:
++        return LaneDecision(
++            lane=HermesLane.GENERAL,
++            model=ModelClass.MINISTRAL_8B_INSTRUCT,
++            target_node=node,
++            cache=CacheProfile.SMALL_WORKER,
++            toolset=ToolsetProfile.RESTRICTED_WORKER,
++            persona=PersonaProfile.NONE,
++            runtime_first=False,
++            escalate=False,
++        )
++
++    if stage == IngressStage.DIAGNOSE:
++        model = (
++            ModelClass.MINISTRAL_8B_REASONING
++            if node == NodeClass.AIR5
++            else ModelClass.MINISTRAL_3B_REASONING
++        )
++        return LaneDecision(
++            lane=HermesLane.REASONING,
++            model=model,
++            target_node=node,
++            cache=CacheProfile.FAILURE,
++            toolset=ToolsetProfile.READ_ONLY,
++            persona=PersonaProfile.NONE,
++            runtime_first=False,
++            escalate=False,
++        )
++
++    if stage == IngressStage.COMPLEX_PLAN:
++        return LaneDecision(
++            lane=HermesLane.REASONING,
++            model=ModelClass.MINISTRAL_8B_REASONING,
++            target_node=NodeClass.AIR5,
++            cache=CacheProfile.EXPANDED,
++            toolset=ToolsetProfile.REPO_READ_ONLY,
++            persona=PersonaProfile.NONE,
++            runtime_first=False,
++            escalate=node != NodeClass.AIR5 or risk != TaskRisk.LOW,
++        )
++
++    if stage == IngressStage.PATCH_GENERATE:
++        model = (
++            ModelClass.MINISTRAL_8B_INSTRUCT
++            if risk == TaskRisk.LOW
++            else ModelClass.MINISTRAL_8B_REASONING
++        )
++        return LaneDecision(
++            lane=HermesLane.REASONING,
++            model=model,
++            target_node=NodeClass.AIR5,
++            cache=CacheProfile.ALLOWED_FILES,
++            toolset=ToolsetProfile.FILE_PATCH,
++            persona=PersonaProfile.NONE,
++            runtime_first=False,
++            escalate=node != NodeClass.AIR5,
++        )
++
++    if stage == IngressStage.VERIFY:
++        return LaneDecision(
++            lane=HermesLane.RUNTIME,
++            model=ModelClass.NONE,
++            target_node=node,
++            cache=CacheProfile.NONE,
++            toolset=ToolsetProfile.TERMINAL_VERIFY,
++            persona=PersonaProfile.NONE,
++            runtime_first=True,
++            escalate=False,
++        )
++
++    if stage == IngressStage.CLOSEOUT:
++        return LaneDecision(
++            lane=HermesLane.GENERAL,
++            model=_instruct_model_for_node(node),
++            target_node=node,
++            cache=CacheProfile.SUMMARY,
++            toolset=ToolsetProfile.NONE,
++            persona=PersonaProfile.MINIMAL,
++            runtime_first=False,
++            escalate=False,
++        )
++
++    if stage == IngressStage.USER_RENDER:
++        return LaneDecision(
++            lane=HermesLane.RENDER,
++            model=ModelClass.MINISTRAL_8B_INSTRUCT,
++            target_node=NodeClass.AIR5,
++            cache=CacheProfile.PERSONA,
++            toolset=ToolsetProfile.NONE,
++            persona=PersonaProfile.ALICE_CANONICAL,
++            runtime_first=False,
++            escalate=node != NodeClass.AIR5,
++        )
++
++    raise ValueError(f"unsupported ingress stage: {stage}")
++
++
++def _instruct_model_for_node(node: NodeClass) -> ModelClass:
++    if node == NodeClass.AIR5:
++        return ModelClass.MINISTRAL_8B_INSTRUCT
++    return ModelClass.MINISTRAL_3B_INSTRUCT
++
++
++# === Lane A Mario Wiring P2 anchor (2026-04-29) ===
++# Constitutional / harness anchors for `select_lane()` IngressStage variants.
++# This module mirrors the Rust `runtime-core::lane::select_lane` contract;
++# the anchor mapping is identical to the Rust side (see lane.rs P2 anchor).
++# Read-only references — these comments must not drift from upstream §:
++#   INGRESS_CLASSIFY → constitution-v1#3 Plan stage prelude
++#                       (WORK_PROCESS_RULES.md "Issue" precision-layer)
++#   ROUTE_PLAN       → constitution-v1#3 Plan stage
++#                       (WORK_PROCESS_RULES.md Stage 2 Plan)
++#   NORMAL_TURN      → constitution-v1#3 Work stage
++#                       (WORK_PROCESS_RULES.md Stage 3 Execute)
++#   WORKER_TASK      → constitution-v1#3 Work stage (executor lane)
++#                      maps to the worker class; active profiles may bind this
++#                      model class to SuperGemma for fast sustained work.
++#                       + super-mario-constitution#4 Reviewer Cross Rule
++#   DIAGNOSE         → constitution-v1#3 Review stage
++#                       (WORK_PROCESS_RULES.md Stage 4 Review)
++#   COMPLEX_PLAN     → constitution-v1#3 Plan stage (loop_work / milestone_work)
++#                       + harness-rules#5 Wiring Law
++#   PATCH_GENERATE   → constitution-v1#3 Work stage (patch executor)
++#                       + harness-rules#5 Wiring Law (file scope)
++#   VERIFY           → constitution-v1#3 Verify stage
++#                       (WORK_PROCESS_RULES.md Stage 5 Verify)
++#   CLOSEOUT         → constitution-v1#3 Closeout stage
++#                       (WORK_PROCESS_RULES.md Stage 6 Closeout)
++#   USER_RENDER      → constitution-v1#3 Closeout artifact + persona policy
++#                       (WORK_PROCESS_RULES.md Stage 7 Report precision-layer)
++# Mario role anchor:
++#   Lane A Mario dispatch is Option A — Mario is a separate Hermes profile
++#   instance at ~/.hermes/profiles/mario/ (per ~/.hermes/SOUL.md:5,8,17-19,95
++#   and super-mario-constitution-v1.md:65). select_lane() does NOT itself pick
++#   Mario; the central control center is selected by profile resolution in
++#   `hermes_cli/main.py::_apply_profile_override` (see Lane A P2b anchor).
++# Bidirectional integrity (matrix v1 Block H row 2):
++#   포괄: every constitution §3 stage maps to >= 1 IngressStage above.
++#   보호: every IngressStage member cites a constitution / harness § anchor.
++# Forbidden: editing this anchor block from any packet other than Lane A
++#            packets that explicitly include this file in allowed_files.
++# === end anchor ===
+diff --git a/hermes_cli/lane_runtime.py b/hermes_cli/lane_runtime.py
+new file mode 100644
+index 000000000..3e1de5938
+--- /dev/null
++++ b/hermes_cli/lane_runtime.py
+@@ -0,0 +1,92 @@
++"""Runtime entrypoint mapping for Hermes lane policy."""
++
++from __future__ import annotations
++
++from typing import Any, Dict
++
++from hermes_cli.config import get_lane_routing_config, load_config
++
++
++_DEFAULT_ENTRYPOINTS: Dict[str, Dict[str, str]] = {
++    "cli": {"stage": "normal_turn", "node": "air5", "risk": "low"},
++    "cli_background": {"stage": "worker_task", "node": "air5", "risk": "medium"},
++    "cli_btw": {"stage": "normal_turn", "node": "air5", "risk": "low"},
++    "gateway": {"stage": "normal_turn", "node": "air5", "risk": "low"},
++    "gateway_background": {"stage": "worker_task", "node": "air5", "risk": "medium"},
++    "gateway_btw": {"stage": "normal_turn", "node": "air5", "risk": "low"},
++}
++
++
++def _string_dict(value: Any) -> Dict[str, str]:
++    if not isinstance(value, dict):
++        return {}
++    return {str(k): str(v) for k, v in value.items() if str(v).strip()}
++
++
++def resolve_lane_kwargs(
++    entrypoint: str,
++    *,
++    config: Dict[str, Any] | None = None,
++    apply_model_map: bool = True,
++) -> Dict[str, Any]:
++    """Return AIAgent lane kwargs for a runtime entrypoint.
++
++    Empty ``lane_routing`` maps preserve the existing concrete model/toolset
++    behavior while still recording lane policy metadata on the agent.
++    """
++    source = config if config is not None else load_config()
++    lane_cfg = source.get("lane_routing") if isinstance(source, dict) else {}
++    if not isinstance(lane_cfg, dict):
++        lane_cfg = {}
++    if lane_cfg.get("enabled") is False:
++        return {}
++
++    defaults = _string_dict(lane_cfg.get("defaults"))
++    entrypoints = lane_cfg.get("entrypoints")
++    entry_cfg = {}
++    if isinstance(entrypoints, dict):
++        entry_cfg = _string_dict(entrypoints.get(entrypoint))
++
++    base = dict(_DEFAULT_ENTRYPOINTS.get(entrypoint, _DEFAULT_ENTRYPOINTS["cli"]))
++    base.update(defaults)
++    base.update(entry_cfg)
++
++    routing = get_lane_routing_config(source)
++    return {
++        "lane_stage": base.get("stage", "normal_turn"),
++        "lane_node": base.get("node", "air5"),
++        "lane_risk": base.get("risk", "low"),
++        "lane_model_map": routing.get("model_map") if apply_model_map else {},
++        "lane_runtime_map": routing.get("runtime_map") if apply_model_map else {},
++        "lane_toolset_map": routing.get("toolset_map"),
++    }
++
++
++# === Lane A Mario Wiring P2 anchor (2026-04-29) ===
++# Constitutional / harness anchors for runtime entrypoint -> lane stage mapping.
++# Read-only references — these comments must not drift from upstream §:
++#   "cli"                → IngressStage NORMAL_TURN
++#                           (constitution-v1#3 Work stage; user terminal entry)
++#   "cli_background"     → IngressStage WORKER_TASK
++#                           (constitution-v1#3 Work stage executor lane)
++#   "cli_btw"            → IngressStage NORMAL_TURN
++#                           (constitution-v1#3 Work stage; "by the way" relay)
++#   "gateway"            → IngressStage NORMAL_TURN
++#                           (constitution-v1#3 Work stage; messaging-platform entry)
++#   "gateway_background" → IngressStage WORKER_TASK
++#                           (constitution-v1#3 Work stage executor lane)
++#   "gateway_btw"        → IngressStage NORMAL_TURN
++#                           (constitution-v1#3 Work stage; gateway "btw" relay)
++# Mario role anchor:
++#   resolve_lane_kwargs() returns AIAgent kwargs only; it does NOT pick Mario
++#   itself. The Mario profile (Option A — ~/.hermes/profiles/mario/) is selected
++#   upstream by `hermes_cli/main.py::_apply_profile_override` (see Lane A P2b
++#   anchor). When the active profile is mario, the verdict-only judge lane
++#   semantics from ~/.hermes/SOUL.md govern the agent's posture; this function
++#   continues to return the same lane stage based on the entrypoint string.
++# Bidirectional integrity (matrix v1 Block H row 3):
++#   포괄: every constitution §3 stage that has a runtime entrypoint maps here.
++#   보호: every entrypoint key cites a constitution § anchor + IngressStage.
++# Forbidden: editing this anchor block from any packet other than Lane A
++#            packets that explicitly include this file in allowed_files.
++# === end anchor ===
+diff --git a/hermes_cli/main.py b/hermes_cli/main.py
+index 2a2143874..a06cd9c77 100644
+--- a/hermes_cli/main.py
++++ b/hermes_cli/main.py
+@@ -123,6 +123,19 @@ def _apply_profile_override() -> None:
+             print(f"Warning: profile override failed ({exc}), using default", file=sys.stderr)
+             return
+         os.environ["HERMES_HOME"] = hermes_home
++        # === Lane A Mario Wiring P2 anchor (2026-04-29) ===
++        # Mario judge-lane recognition (record-only).
++        # Source: ~/.hermes/SOUL.md:5,8,17-19,95 + super-mario-constitution-v1.md:65.
++        # Lane A Option A — Mario is the central control center governing
++        # Dev Chain / Learning Chain / Context Blocks. This block sets a
++        # metadata env var so downstream code can detect Mario without forcing
++        # a switch. Verdict-only behavior is shaped by the profile SOUL.md
++        # anchor block, not by this flag.
++        # Forbidden: editing this anchor outside Lane A packets that include
++        # this file in allowed_files.
++        if profile_name == "mario":
++            os.environ.setdefault("HERMES_LANE_ROLE", "judge")
++        # === end anchor ===
+         # Strip the flag from argv so argparse doesn't choke
+         if consume > 0:
+             for i, arg in enumerate(argv):
+diff --git a/hermes_cli/route_gate.py b/hermes_cli/route_gate.py
+new file mode 100644
+index 000000000..111c23a25
+--- /dev/null
++++ b/hermes_cli/route_gate.py
+@@ -0,0 +1,110 @@
++"""Deterministic route gates for explicit Hermes operator prompts."""
++
++from __future__ import annotations
++
++import json
++import os
++import re
++from typing import Any, Dict, Optional
++
++from utils import env_var_enabled
++
++
++_ROUTE_ESCALATION = {
++    "self": "l0_executor",
++    "air5": "l1_hermes",
++    "specialist": "l2_mario",
++}
++
++
++def route_dispatch_primary_enabled() -> bool:
++    """Return True when explicit route packets should short-circuit dispatch.
++
++    The route gate is already the primary path for explicit Task:/Options:
++    background prompts.  The env var names the policy for operators while
++    HERMES_ROUTE_DISPATCH_DISABLED remains a narrow emergency off switch.
++    """
++    if env_var_enabled("HERMES_ROUTE_DISPATCH_DISABLED"):
++        return False
++    if os.getenv("HERMES_ROUTE_DISPATCH_PRIMARY") is not None:
++        return env_var_enabled("HERMES_ROUTE_DISPATCH_PRIMARY")
++    return True
++
++
++def _task_text(prompt: str) -> str:
++    match = re.search(r"Task:\s*([\s\S]*?)(?:Options:|$)", prompt, flags=re.IGNORECASE)
++    value = match.group(1) if match else prompt
++    return " ".join(value.strip().split())
++
++
++def deterministic_hermes_route_gate(prompt: str) -> Optional[Dict[str, Any]]:
++    """Return a governed route decision for explicit ``Task:/Options:`` prompts.
++
++    The gate is deliberately narrow.  It does not classify arbitrary background
++    tasks; callers must opt in with both a ``Task:`` body and route ``Options:``.
++    """
++    if not route_dispatch_primary_enabled():
++        return None
++
++    text = str(prompt or "").strip()
++    if not text:
++        return None
++    if not re.search(r"\bTask:\s*", text, flags=re.IGNORECASE):
++        return None
++    if not re.search(r"\bOptions:\s*", text, flags=re.IGNORECASE):
++        return None
++
++    task = _task_text(text)
++    lower = task.lower()
++    route = None
++    if (
++        "24b" in lower
++        or "safetensors" in lower
++        or "conversion" in lower
++        or "convert" in lower
++        or "cuda" in lower
++        or "remote training" in lower
++    ):
++        route = "specialist"
++    elif "macbook air" in lower or "air5" in lower or "ui" in lower:
++        route = "air5"
++    elif "local jsonl" in lower or "jsonl dataset" in lower or "local smoke" in lower:
++        route = "self"
++
++    if route is None:
++        return None
++
++    return {
++        "reason": task or "route selected by deterministic gate",
++        "route": route,
++        "source": "deterministic_gate",
++        "escalation": _ROUTE_ESCALATION[route],
++    }
++
++
++def deterministic_hermes_route_dispatch_packet(prompt: str) -> Optional[Dict[str, Any]]:
++    decision = deterministic_hermes_route_gate(prompt)
++    if decision is None:
++        return None
++    return {
++        "packet_state": "route_decided",
++        "status": "ready_for_dispatch",
++        "source": decision["source"],
++        "route": decision["route"],
++        "escalation": decision["escalation"],
++        "reason": decision["reason"],
++        "retry_count": 0,
++        "unresolved_risks": [],
++    }
++
++
++def deterministic_hermes_route_gate_text(prompt: str) -> Optional[str]:
++    decision = deterministic_hermes_route_gate(prompt)
++    if decision is None:
++        return None
++    public_decision = {
++        "reason": decision["reason"],
++        "route": decision["route"],
++        "source": decision["source"],
++    }
++    return json.dumps(public_decision, ensure_ascii=False, separators=(",", ":"))
+diff --git a/run_agent.py b/run_agent.py
+index 5005153b3..6865cc9ba 100644
+--- a/run_agent.py
++++ b/run_agent.py
+@@ -109,6 +109,316 @@ from agent.trajectory import (
+ from utils import atomic_json_write, env_var_enabled
+ 
+ 
++DEFAULT_RUST_CONTEXT_PREVIEW_URL = "http://127.0.0.1:4319/context/pack-preview"
++DEFAULT_RUST_RUNTIME_CONTRACT_URL = "http://127.0.0.1:4319/runtime/compatibility-preview"
++DEFAULT_RUST_CHAT_PREVIEW_URL = "http://127.0.0.1:4319/hermes/chat-preview"
++DEFAULT_RUST_LANE_POLICY_URL = "http://127.0.0.1:4319/runtime/lane-select-preview"
++
++
++def _rust_context_preview_enabled() -> bool:
++    """Return True when Rust context packing should be requested.
++
++    HERMES_RUST_CONTEXT_PRIMARY is the promotion switch.  The older preview
++    flag remains as a compatibility alias for dry-run visibility.
++    """
++    return (
++        env_var_enabled("HERMES_RUST_CONTEXT_PRIMARY")
++        or env_var_enabled("HERMES_RUST_CONTEXT_PREVIEW")
++    )
++
++
++def _rust_context_apply_enabled() -> bool:
++    """Return True when Rust context packing may alter outgoing API messages.
++
++    Primary implies apply.  The older apply flag remains available for the
++    preview/apply two-switch rollout path.
++    """
++    return (
++        env_var_enabled("HERMES_RUST_CONTEXT_PRIMARY")
++        or env_var_enabled("HERMES_RUST_CONTEXT_APPLY")
++    )
++
++
++def _rust_runtime_contract_enabled() -> bool:
++    """Return True when Hermes should request the Rust runtime compatibility contract."""
++    return env_var_enabled("HERMES_RUST_RUNTIME_CONTRACT")
++
++
++def _rust_lane_policy_enabled() -> bool:
++    """Return True when Hermes should request Rust as the lane-policy authority."""
++    return env_var_enabled("HERMES_RUST_LANE_POLICY")
++
++
++def _rust_chat_preview_enabled() -> bool:
++    """Return True when Hermes may satisfy a plain chat turn through Rust.
++
++    HERMES_RUST_CHAT_PRIMARY is the promotion switch.  The older preview flag
++    remains as a compatibility alias while the Rust path is rolled forward.
++    """
++    return (
++        env_var_enabled("HERMES_RUST_CHAT_PRIMARY")
++        or env_var_enabled("HERMES_RUST_CHAT_PREVIEW")
++    )
++
++
++def _message_content_preview_text(content: Any) -> str:
++    if isinstance(content, str):
++        return content
++    if content is None:
++        return ""
++    try:
++        return json.dumps(content, ensure_ascii=False, sort_keys=True)
++    except Exception:
++        return str(content)
++
++
++def _context_segment_priority(role: str, index: int, total: int) -> tuple[int, bool]:
++    if role == "system":
++        return 255, True
++    if role == "user" and index == total - 1:
++        return 240, True
++    if role == "user":
++        return 150, False
++    if role == "assistant":
++        return 100, False
++    if role == "tool":
++        return 80, False
++    return 60, False
++
++
++def _build_rust_context_preview_payload(
++    api_messages: List[Dict[str, Any]],
++    *,
++    max_prompt_tokens: int,
++    reserved_response_tokens: int,
++) -> Dict[str, Any]:
++    segments = []
++    total = len(api_messages)
++    for index, message in enumerate(api_messages):
++        if not isinstance(message, dict):
++            continue
++        role = str(message.get("role") or "unknown")
++        content_text = _message_content_preview_text(message.get("content"))
++        priority, required = _context_segment_priority(role, index, total)
++        segments.append({
++            "id": f"{index}:{role}",
++            "kind": role,
++            "priority": priority,
++            "required": required,
++            "content": content_text,
++            "estimated_tokens": estimate_tokens_rough(content_text),
++        })
++
++    return {
++        "budget": {
++            "max_prompt_tokens": max(0, int(max_prompt_tokens or 0)),
++            "reserved_response_tokens": max(0, int(reserved_response_tokens or 0)),
++        },
++        "segments": segments,
++    }
++
++
++def _request_rust_context_preview(
++    url: str,
++    payload: Dict[str, Any],
++    *,
++    timeout: float,
++    urlopen=None,
++) -> Dict[str, Any]:
++    import urllib.request
++
++    opener = urlopen or urllib.request.urlopen
++    body = json.dumps(payload).encode("utf-8")
++    request = urllib.request.Request(
++        url,
++        data=body,
++        headers={"Content-Type": "application/json"},
++        method="POST",
++    )
++    with opener(request, timeout=timeout) as response:
++        response_body = response.read()
++    return json.loads(response_body.decode("utf-8"))
++
++
++def _request_rust_runtime_contract(
++    url: str,
++    *,
++    session_id: Optional[str],
++    timeout: float,
++    urlopen=None,
++) -> Dict[str, Any]:
++    import urllib.request
++
++    opener = urlopen or urllib.request.urlopen
++    body = json.dumps({"session_id": session_id}).encode("utf-8")
++    request = urllib.request.Request(
++        url,
++        data=body,
++        headers={"Content-Type": "application/json"},
++        method="POST",
++    )
++    with opener(request, timeout=timeout) as response:
++        response_body = response.read()
++    return json.loads(response_body.decode("utf-8"))
++
++
++def _request_rust_lane_policy(
++    url: str,
++    *,
++    stage: str,
++    node: Optional[str],
++    risk: Optional[str],
++    timeout: float,
++    urlopen=None,
++) -> Dict[str, Any]:
++    import urllib.request
++
++    opener = urlopen or urllib.request.urlopen
++    body = json.dumps({
++        "stage": stage,
++        "node": node,
++        "risk": risk,
++    }).encode("utf-8")
++    request = urllib.request.Request(
++        url,
++        data=body,
++        headers={"Content-Type": "application/json"},
++        method="POST",
++    )
++    with opener(request, timeout=timeout) as response:
++        response_body = response.read()
++    return json.loads(response_body.decode("utf-8"))
++
++
++def _build_rust_chat_preview_payload(
++    api_messages: List[Dict[str, Any]],
++    *,
++    session_id: Optional[str],
++    fallback_allowed: bool = True,
++    stream: bool = False,
++    max_new_tokens: Optional[int] = None,
++) -> Dict[str, Any]:
++    messages = []
++    for message in api_messages:
++        if not isinstance(message, dict):
++            continue
++        role = str(message.get("role") or "user")
++        content = _message_content_preview_text(message.get("content")).strip()
++        if content:
++            messages.append({"role": role, "content": content})
++
++    payload: Dict[str, Any] = {
++        "session_id": session_id,
++        "messages": messages,
++        "mode": "chat",
++        "stream": bool(stream),
++        "fallback_allowed": bool(fallback_allowed),
++    }
++    if max_new_tokens is not None:
++        payload["max_new_tokens"] = max(1, int(max_new_tokens))
++    return payload
++
++
++def _request_rust_chat_preview(
++    url: str,
++    payload: Dict[str, Any],
++    *,
++    timeout: float,
++    urlopen=None,
++) -> Dict[str, Any]:
++    import urllib.request
++
++    opener = urlopen or urllib.request.urlopen
++    body = json.dumps(payload).encode("utf-8")
++    request = urllib.request.Request(
++        url,
++        data=body,
++        headers={"Content-Type": "application/json"},
++        method="POST",
++    )
++    with opener(request, timeout=timeout) as response:
++        response_body = response.read()
++    return json.loads(response_body.decode("utf-8"))
++
++
++def _messages_include_tool_transcript(api_messages: List[Dict[str, Any]]) -> bool:
++    for message in api_messages:
++        if not isinstance(message, dict):
++            continue
++        if message.get("role") == "tool":
++            return True
++        if message.get("tool_calls"):
++            return True
++    return False
++
++
++def _rust_chat_preview_result_text(preview: Dict[str, Any]) -> Optional[str]:
++    if not isinstance(preview, dict):
++        return None
++    if preview.get("used_runtime") != "rust":
++        return None
++    if preview.get("fallback_reason"):
++        return None
++    text = preview.get("text")
++    if not isinstance(text, str):
++        return None
++    text = text.strip()
++    return text or None
++
++
++def _apply_rust_context_preview_packet(
++    api_messages: List[Dict[str, Any]],
++    preview: Dict[str, Any],
++) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
++    """Return API messages selected by the Rust context packet.
++
++    Tool transcripts are intentionally left untouched. Dropping only part of a
++    tool-call/result pair can make OpenAI-compatible APIs reject the request, so
++    the first applied mode only handles plain conversation context.
++    """
++    if not isinstance(preview, dict):
++        return api_messages, {"applied": False, "reason": "invalid_preview"}
++
++    packet = preview.get("packet")
++    if not isinstance(packet, dict):
++        return api_messages, {"applied": False, "reason": "missing_packet"}
++
++    if _messages_include_tool_transcript(api_messages):
++        return api_messages, {"applied": False, "reason": "tool_transcript_present"}
++
++    selected = packet.get("selected")
++    if not isinstance(selected, list):
++        return api_messages, {"applied": False, "reason": "missing_selected"}
++
++    selected_indexes = set()
++    for segment in selected:
++        if not isinstance(segment, dict):
++            continue
++        raw_id = str(segment.get("id") or "")
++        index_text = raw_id.split(":", 1)[0]
++        try:
++            index = int(index_text)
++        except ValueError:
++            continue
++        if 0 <= index < len(api_messages):
++            selected_indexes.add(index)
++
++    if not selected_indexes:
++        return api_messages, {"applied": False, "reason": "empty_selected"}
++
++    packed_messages = [
++        copy.deepcopy(message)
++        for index, message in enumerate(api_messages)
++        if index in selected_indexes
++    ]
++    return packed_messages, {
++        "applied": True,
++        "selected": len(packed_messages),
++        "dropped": max(0, len(api_messages) - len(packed_messages)),
++        "pressure": packet.get("pressure", "unknown"),
++    }
++
++
+ 
+ class _SafeWriter:
+     """Transparent stdio wrapper that catches OSError/ValueError from broken pipes.
+@@ -604,6 +914,12 @@ class AIAgent:
+         checkpoint_max_snapshots: int = 50,
+         pass_session_id: bool = False,
+         persist_session: bool = True,
++        lane_stage: str = None,
++        lane_node: str = None,
++        lane_risk: str = None,
++        lane_model_map: Dict[str, str] = None,
++        lane_runtime_map: Dict[str, Dict[str, str]] = None,
++        lane_toolset_map: Dict[str, List[str]] = None,
+     ):
+         """
+         Initialize the AI Agent.
+@@ -643,10 +959,97 @@ class AIAgent:
+             skip_context_files (bool): If True, skip auto-injection of SOUL.md, AGENTS.md, and .cursorrules
+                 into the system prompt. Use this for batch processing and data generation to avoid
+                 polluting trajectories with user-specific persona or project instructions.
++            lane_stage: Optional Hermes lane-policy stage. When set, computes a lane decision.
++            lane_node: Optional node class for lane policy (air5, imac, air1). Defaults to air5.
++            lane_risk: Optional task risk for lane policy (low, medium, high). Defaults to low.
++            lane_model_map: Optional map from lane model class to concrete Hermes model id.
++            lane_runtime_map: Optional map from lane model class to runtime overrides.
++            lane_toolset_map: Optional map from lane toolset profile to concrete Hermes toolsets.
+         """
+         _install_safe_stdio()
+ 
+         self.model = model
++        self.lane_decision = None
++        self.lane_policy = None
++        self.lane_policy_source = None
++        if lane_stage:
++            decision_model = None
++            decision_toolset = None
++
++            if _rust_lane_policy_enabled():
++                try:
++                    url = os.getenv("HERMES_RUST_LANE_POLICY_URL") or DEFAULT_RUST_LANE_POLICY_URL
++                    timeout = float(os.getenv("HERMES_RUST_LANE_POLICY_TIMEOUT", "0.35"))
++                    payload = _request_rust_lane_policy(
++                        url,
++                        stage=lane_stage,
++                        node=lane_node or "air5",
++                        risk=lane_risk or "low",
++                        timeout=timeout,
++                    )
++                    decision_payload = payload.get("decision") if isinstance(payload, dict) else None
++                    if not isinstance(decision_payload, dict):
++                        raise ValueError("Rust lane-policy response did not include decision")
++                    self.lane_decision = None
++                    self.lane_policy = dict(decision_payload)
++                    self.lane_policy_source = "rust"
++                    decision_model = self.lane_policy.get("model")
++                    decision_toolset = self.lane_policy.get("toolset")
++                except Exception as exc:
++                    self._last_rust_lane_policy = {"applied": False, "error": str(exc)}
++
++            if self.lane_policy is None:
++                from hermes_cli.lane_policy import IngressStage, LaneInput, NodeClass, TaskRisk, select_lane
++
++                decision = select_lane(
++                    LaneInput(
++                        stage=IngressStage(lane_stage),
++                        node=NodeClass(lane_node or "air5"),
++                        risk=TaskRisk(lane_risk or "low"),
++                    )
++                )
++                self.lane_decision = decision
++                self.lane_policy = decision.to_dict()
++                self.lane_policy_source = "python"
++                decision_model = decision.model.value
++                decision_toolset = decision.toolset.value
++            elif self.lane_policy_source == "rust":
++                self._last_rust_lane_policy = {"applied": True, "decision": self.lane_policy}
++
++            if lane_model_map is None and lane_runtime_map is None and lane_toolset_map is None:
++                try:
++                    from hermes_cli.config import get_lane_routing_config
++
++                    lane_config = get_lane_routing_config()
++                    lane_model_map = lane_config.get("model_map") or None
++                    lane_runtime_map = lane_config.get("runtime_map") or None
++                    lane_toolset_map = lane_config.get("toolset_map") or None
++                except Exception:
++                    pass
++
++            if lane_runtime_map:
++                runtime = lane_runtime_map.get(decision_model) or {}
++                if runtime.get("model"):
++                    self.model = runtime["model"]
++                if runtime.get("provider"):
++                    provider = runtime["provider"]
++                if runtime.get("base_url"):
++                    base_url = runtime["base_url"]
++                if runtime.get("api_key"):
++                    api_key = runtime["api_key"]
++                if runtime.get("api_mode"):
++                    api_mode = runtime["api_mode"]
++
++            if lane_model_map:
++                lane_model = lane_model_map.get(decision_model)
++                if lane_model:
++                    self.model = lane_model
++
++            if enabled_toolsets is None and lane_toolset_map:
++                lane_toolsets = lane_toolset_map.get(decision_toolset)
++                if lane_toolsets is not None:
++                    enabled_toolsets = list(lane_toolsets)
++
+         self.max_iterations = max_iterations
+         # Shared iteration budget — parent creates, children inherit.
+         # Consumed by every LLM turn across parent + all subagents.
+@@ -1761,6 +2164,167 @@ class AIAgent:
+             except Exception:
+                 logger.debug("status_callback error in _emit_status", exc_info=True)
+ 
++    def _maybe_preview_rust_context_budget(
++        self,
++        api_messages: List[Dict[str, Any]],
++        approx_tokens: int,
++    ) -> List[Dict[str, Any]]:
++        """Run the Rust context budgeter and optionally apply its selection.
++
++        Preview is disabled by default. Applying the packet requires the
++        additional HERMES_RUST_CONTEXT_APPLY opt-in and must fail open to the
++        original Hermes messages.
++        """
++        if not _rust_context_preview_enabled():
++            return api_messages
++
++        try:
++            url = (
++                os.getenv("HERMES_RUST_CONTEXT_PREVIEW_URL")
++                or DEFAULT_RUST_CONTEXT_PREVIEW_URL
++            ).strip()
++            if not url:
++                return api_messages
++
++            timeout = float(os.getenv("HERMES_RUST_CONTEXT_PREVIEW_TIMEOUT", "0.35"))
++            env_max_prompt = os.getenv("HERMES_RUST_CONTEXT_PREVIEW_MAX_PROMPT_TOKENS")
++            if env_max_prompt:
++                max_prompt_tokens = int(env_max_prompt)
++            else:
++                compressor = getattr(self, "context_compressor", None)
++                max_prompt_tokens = int(getattr(compressor, "context_length", 0) or 0)
++                if max_prompt_tokens <= 0:
++                    max_prompt_tokens = max(int(approx_tokens or 0), 1)
++
++            env_reserved = os.getenv("HERMES_RUST_CONTEXT_PREVIEW_RESERVED_RESPONSE_TOKENS")
++            if env_reserved:
++                reserved_response_tokens = int(env_reserved)
++            else:
++                reserved_response_tokens = int(getattr(self, "max_tokens", None) or 4096)
++
++            payload = _build_rust_context_preview_payload(
++                api_messages,
++                max_prompt_tokens=max_prompt_tokens,
++                reserved_response_tokens=reserved_response_tokens,
++            )
++            preview = _request_rust_context_preview(url, payload, timeout=timeout)
++            self._last_rust_context_preview = preview
++
++            packet = preview.get("packet", {}) if isinstance(preview, dict) else {}
++            selected = len(packet.get("selected") or [])
++            dropped = len(packet.get("dropped") or [])
++            pressure = packet.get("pressure", "unknown")
++            apply_result = {"applied": False, "reason": "disabled"}
++            packed_messages = api_messages
++            if _rust_context_apply_enabled():
++                packed_messages, apply_result = _apply_rust_context_preview_packet(api_messages, preview)
++                self._last_rust_context_apply = apply_result
++            else:
++                self._last_rust_context_apply = apply_result
++            logger.info(
++                "rust context preview: session=%s selected=%s dropped=%s pressure=%s approx_tokens=%s applied=%s",
++                self.session_id or "none",
++                selected,
++                dropped,
++                pressure,
++                approx_tokens,
++                apply_result.get("applied"),
++            )
++            if self.verbose_logging and not self.quiet_mode:
++                self._vprint(
++                    f"{self.log_prefix}   🦀 Rust context preview: "
++                    f"selected={selected}, dropped={dropped}, pressure={pressure}, "
++                    f"applied={apply_result.get('applied')}"
++                )
++            return packed_messages
++        except Exception as exc:
++            self._last_rust_context_preview = {"error": str(exc)}
++            self._last_rust_context_apply = {"applied": False, "reason": "error"}
++            logger.debug("rust context preview skipped: %s", exc, exc_info=True)
++            return api_messages
++
++    def _maybe_rust_runtime_contract_system_message(self) -> str:
++        """Fetch the shared Hermes/local inference/Candle/Devstral contract if enabled."""
++        if not _rust_runtime_contract_enabled():
++            return ""
++
++        try:
++            url = (
++                os.getenv("HERMES_RUST_RUNTIME_CONTRACT_URL")
++                or DEFAULT_RUST_RUNTIME_CONTRACT_URL
++            ).strip()
++            if not url:
++                return ""
++            timeout = float(os.getenv("HERMES_RUST_RUNTIME_CONTRACT_TIMEOUT", "0.35"))
++            payload = _request_rust_runtime_contract(
++                url,
++                session_id=self.session_id,
++                timeout=timeout,
++            )
++            self._last_rust_runtime_contract = payload
++            system_message = str(payload.get("system_message") or "").strip()
++            if self.verbose_logging and not self.quiet_mode and system_message:
++                self._vprint(f"{self.log_prefix}   🦀 Rust runtime contract: applied")
++            return system_message
++        except Exception as exc:
++            self._last_rust_runtime_contract = {"error": str(exc)}
++            logger.debug("rust runtime contract skipped: %s", exc, exc_info=True)
++            return ""
++
++    def _maybe_rust_chat_preview_response(
++        self,
++        api_messages: List[Dict[str, Any]],
++    ) -> Optional[str]:
++        """Return a Rust-generated plain chat response when explicitly enabled.
++
++        This path is intentionally narrower than the normal Hermes loop. Tool
++        turns stay on the Python/provider path so existing tool execution,
++        retries, and session semantics remain unchanged.
++        """
++        if not _rust_chat_preview_enabled():
++            return None
++        if self.tools or _messages_include_tool_transcript(api_messages):
++            self._last_rust_chat_preview = {
++                "applied": False,
++                "reason": "tools_or_transcript_present",
++            }
++            return None
++
++        try:
++            url = (
++                os.getenv("HERMES_RUST_CHAT_PREVIEW_URL")
++                or DEFAULT_RUST_CHAT_PREVIEW_URL
++            ).strip()
++            if not url:
++                return None
++            timeout = float(os.getenv("HERMES_RUST_CHAT_PREVIEW_TIMEOUT", "0.6"))
++            payload = _build_rust_chat_preview_payload(
++                api_messages,
++                session_id=self.session_id,
++                fallback_allowed=True,
++                stream=False,
++                max_new_tokens=getattr(self, "max_tokens", None),
++            )
++            if not payload["messages"]:
++                self._last_rust_chat_preview = {
++                    "applied": False,
++                    "reason": "empty_messages",
++                }
++                return None
++
++            preview = _request_rust_chat_preview(url, payload, timeout=timeout)
++            self._last_rust_chat_preview = preview
++            text = _rust_chat_preview_result_text(preview)
++            if not text:
++                return None
++            if self.verbose_logging and not self.quiet_mode:
++                self._vprint(f"{self.log_prefix}   🦀 Rust chat primary: applied")
++            return text
++        except Exception as exc:
++            self._last_rust_chat_preview = {"applied": False, "error": str(exc)}
++            logger.debug("rust chat preview skipped: %s", exc, exc_info=True)
++            return None
++
+     def _current_main_runtime(self) -> Dict[str, str]:
+         """Return the live main runtime for session-scoped auxiliary routing."""
+         return {
+@@ -8143,6 +8707,9 @@ class AIAgent:
+             effective_system = active_system_prompt or ""
+             if self.ephemeral_system_prompt:
+                 effective_system = (effective_system + "\n\n" + self.ephemeral_system_prompt).strip()
++            runtime_contract_system = self._maybe_rust_runtime_contract_system_message()
++            if runtime_contract_system:
++                effective_system = (effective_system + "\n\n" + runtime_contract_system).strip()
+             # NOTE: Plugin context from pre_llm_call hooks is injected into the
+             # user message (see injection block above), NOT the system prompt.
+             # This is intentional — system prompt modifications break the prompt
+@@ -8203,6 +8770,16 @@ class AIAgent:
+             # Calculate approximate request size for logging
+             total_chars = sum(len(str(msg)) for msg in api_messages)
+             approx_tokens = estimate_messages_tokens_rough(api_messages)
++            api_messages = self._maybe_preview_rust_context_budget(api_messages, approx_tokens)
++            total_chars = sum(len(str(msg)) for msg in api_messages)
++            approx_tokens = estimate_messages_tokens_rough(api_messages)
++            rust_chat_preview = self._maybe_rust_chat_preview_response(api_messages)
++            if rust_chat_preview:
++                final_response = rust_chat_preview
++                messages.append({"role": "assistant", "content": final_response})
++                self._response_was_previewed = True
++                _turn_exit_reason = "rust_chat_preview"
++                break
+             
+             # Thinking spinner for quiet mode (animated during API call)
+             thinking_spinner = None
+diff --git a/scripts/watch-hermes-upstream.sh b/scripts/watch-hermes-upstream.sh
+new file mode 100755
+index 000000000..fbb5a5048
+--- /dev/null
++++ b/scripts/watch-hermes-upstream.sh
+@@ -0,0 +1,218 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++STATE_DIR="${HERMES_UPSTREAM_WATCH_STATE_DIR:-$HOME/.hermes/upstream-watch}"
++REPORT_DIR="$STATE_DIR/reports"
++STATE_FILE="$STATE_DIR/state.json"
++PATCH_DIR="${HERMES_UPSTREAM_PATCH_DIR:-$ROOT/patches/hermes-upstream}"
++REMOTE="${HERMES_UPSTREAM_REMOTE:-upstream}"
++BRANCH="${HERMES_UPSTREAM_BRANCH:-main}"
++MODE="dry-run"
++FETCH="1"
++CREATE_BRANCH="0"
++RUN_TESTS="1"
++
++usage() {
++  cat <<'USAGE'
++watch-hermes-upstream.sh [options]
++
++Options:
++  --dry-run             Check whether local patches apply cleanly. Default.
++  --apply               Apply patches on the current branch/worktree.
++  --candidate-branch    Create/switch to hermes-upstream-sync/<timestamp> before apply.
++  --no-fetch            Do not fetch remote refs; use existing local refs.
++  --no-tests            Skip verification commands.
++  --remote NAME         Git remote to check. Default: upstream.
++  --branch NAME         Remote branch to check. Default: main.
++  -h, --help            Show this help.
++
++Environment:
++  HERMES_UPSTREAM_WATCH_STATE_DIR
++  HERMES_UPSTREAM_PATCH_DIR
++  HERMES_UPSTREAM_REMOTE
++  HERMES_UPSTREAM_BRANCH
++USAGE
++}
++
++while [[ $# -gt 0 ]]; do
++  case "$1" in
++    --dry-run)
++      MODE="dry-run"
++      shift
++      ;;
++    --apply)
++      MODE="apply"
++      shift
++      ;;
++    --candidate-branch)
++      CREATE_BRANCH="1"
++      shift
++      ;;
++    --no-fetch)
++      FETCH="0"
++      shift
++      ;;
++    --no-tests)
++      RUN_TESTS="0"
++      shift
++      ;;
++    --remote)
++      REMOTE="${2:?missing remote name}"
++      shift 2
++      ;;
++    --branch)
++      BRANCH="${2:?missing branch name}"
++      shift 2
++      ;;
++    -h|--help)
++      usage
++      exit 0
++      ;;
++    *)
++      echo "unknown option: $1" >&2
++      usage >&2
++      exit 2
++      ;;
++  esac
++done
++
++mkdir -p "$STATE_DIR" "$REPORT_DIR"
++
++now_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
++stamp="$(date -u +"%Y%m%dT%H%M%SZ")"
++report="$REPORT_DIR/$stamp.json"
++
++json_escape() {
++  local value="$1"
++  value="${value//\\/\\\\}"
++  value="${value//\"/\\\"}"
++  value="${value//$'\n'/\\n}"
++  printf '%s' "$value"
++}
++
++read_last_remote_sha() {
++  if [[ ! -f "$STATE_FILE" ]]; then
++    return 0
++  fi
++  sed -n 's/.*"last_remote_sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$STATE_FILE" | tail -1
++}
++
++write_json() {
++  local path="$1"
++  local status="$2"
++  local remote_sha="$3"
++  local local_sha="$4"
++  local message="$5"
++  local patch_status="$6"
++  cat > "$path" <<JSON
++{
++  "updated_at": "$now_utc",
++  "repo": "$(json_escape "$ROOT")",
++  "remote": "$(json_escape "$REMOTE")",
++  "branch": "$(json_escape "$BRANCH")",
++  "mode": "$(json_escape "$MODE")",
++  "status": "$(json_escape "$status")",
++  "local_sha": "$(json_escape "$local_sha")",
++  "remote_sha": "$(json_escape "$remote_sha")",
++  "last_remote_sha": "$(json_escape "${last_remote_sha:-}")",
++  "patch_dir": "$(json_escape "$PATCH_DIR")",
++  "patch_status": "$(json_escape "$patch_status")",
++  "message": "$(json_escape "$message")"
++}
++JSON
++}
++
++cd "$ROOT"
++
++if [[ "$FETCH" == "1" ]]; then
++  git fetch "$REMOTE" "$BRANCH"
++fi
++
++local_sha="$(git rev-parse HEAD)"
++remote_ref="$REMOTE/$BRANCH"
++remote_sha="$(git rev-parse "$remote_ref")"
++last_remote_sha="$(read_last_remote_sha)"
++
++patches=()
++if [[ -d "$PATCH_DIR" ]]; then
++  while IFS= read -r patch_file; do
++    patches+=("$patch_file")
++  done < <(find "$PATCH_DIR" -maxdepth 1 -type f -name '*.patch' | sort)
++fi
++
++if [[ "${#patches[@]}" -eq 0 ]]; then
++  status="detected"
++  if [[ -n "$last_remote_sha" && "$last_remote_sha" == "$remote_sha" ]]; then
++    status="no_update"
++  fi
++  write_json "$report" "$status" "$remote_sha" "$local_sha" "no patch files found" "no_patches"
++  cp "$report" "$STATE_FILE"
++  echo "$status: no patch files found"
++  echo "report: $report"
++  exit 0
++fi
++
++if [[ "$MODE" == "apply" && "$CREATE_BRANCH" == "1" ]]; then
++  candidate_branch="hermes-upstream-sync/$stamp"
++  git switch -c "$candidate_branch"
++fi
++
++patch_message=""
++patch_status="dry_run_passed"
++already_applied_count=0
++for patch_file in "${patches[@]}"; do
++  if ! output="$(git apply --ignore-space-change --ignore-whitespace --check "$patch_file" 2>&1)"; then
++    if git apply --ignore-space-change --ignore-whitespace --reverse --check "$patch_file" >/dev/null 2>&1; then
++      already_applied_count=$((already_applied_count + 1))
++      continue
++    fi
++    patch_status="held_conflict"
++    patch_message="$patch_file: $output"
++    write_json "$report" "held_conflict" "$remote_sha" "$local_sha" "$patch_message" "$patch_status"
++    cp "$report" "$STATE_FILE"
++    echo "held_conflict: $patch_file"
++    echo "$output"
++    echo "report: $report"
++    exit 1
++  fi
++done
++
++if [[ "$MODE" == "apply" ]]; then
++  for patch_file in "${patches[@]}"; do
++    if git apply --ignore-space-change --ignore-whitespace --reverse --check "$patch_file" >/dev/null 2>&1; then
++      continue
++    fi
++    git apply --ignore-space-change --ignore-whitespace "$patch_file"
++  done
++  patch_status="applied_candidate"
++fi
++
++test_status="not_run"
++if [[ "$RUN_TESTS" == "1" ]]; then
++  if "$ROOT/venv/bin/python" -m py_compile "$ROOT/cli.py" "$ROOT/run_agent.py" "$ROOT/hermes_cli/config.py" "$ROOT/hermes_cli/main.py"; then
++    test_status="passed"
++  else
++    test_status="failed"
++    write_json "$report" "test_failed" "$remote_sha" "$local_sha" "py_compile failed" "$patch_status"
++    cp "$report" "$STATE_FILE"
++    echo "test_failed: py_compile"
++    echo "report: $report"
++    exit 1
++  fi
++fi
++
++status="detected"
++if [[ -n "$last_remote_sha" && "$last_remote_sha" == "$remote_sha" ]]; then
++  status="no_update"
++elif [[ "$MODE" == "apply" ]]; then
++  status="applied_candidate"
++elif [[ "$patch_status" == "dry_run_passed" ]]; then
++  status="dry_run_passed"
++fi
++
++write_json "$report" "$status" "$remote_sha" "$local_sha" "tests=$test_status patches=${#patches[@]} already_applied=$already_applied_count" "$patch_status"
++cp "$report" "$STATE_FILE"
++
++echo "$status: remote=$remote_sha local=$local_sha patches=${#patches[@]} already_applied=$already_applied_count tests=$test_status"
++echo "report: $report"
+diff --git a/tests/gateway/test_lane_runtime_wiring.py b/tests/gateway/test_lane_runtime_wiring.py
+new file mode 100644
+index 000000000..27bfaa316
+--- /dev/null
++++ b/tests/gateway/test_lane_runtime_wiring.py
+@@ -0,0 +1,186 @@
++import sys
++import threading
++import types
++from types import SimpleNamespace
++from unittest.mock import AsyncMock
++
++import pytest
++
++import gateway.run as gateway_run
++from gateway.config import Platform
++from gateway.session import SessionSource
++
++
++class _CapturingAgent:
++    last_init = None
++
++    def __init__(self, *args, **kwargs):
++        type(self).last_init = dict(kwargs)
++        self.tools = []
++
++    def run_conversation(self, *args, **kwargs):
++        return {"final_response": "ok", "messages": [], "api_calls": 1, "completed": True}
++
++
++def _install_fake_agent(monkeypatch):
++    fake_run_agent = types.ModuleType("run_agent")
++    fake_run_agent.AIAgent = _CapturingAgent
++    monkeypatch.setitem(sys.modules, "run_agent", fake_run_agent)
++
++
++def _make_runner():
++    runner = object.__new__(gateway_run.GatewayRunner)
++    runner.adapters = {}
++    runner._ephemeral_system_prompt = ""
++    runner._prefill_messages = []
++    runner._reasoning_config = None
++    runner._service_tier = None
++    runner._provider_routing = {}
++    runner._fallback_model = None
++    runner._smart_model_routing = {}
++    runner._running_agents = {}
++    runner._pending_model_notes = {}
++    runner._session_db = None
++    runner._agent_cache = {}
++    runner._agent_cache_lock = threading.Lock()
++    runner._session_model_overrides = {}
++    runner.hooks = SimpleNamespace(loaded_hooks=False)
++    runner.config = SimpleNamespace(streaming=None)
++    runner.session_store = SimpleNamespace(
++        get_or_create_session=lambda source: SimpleNamespace(session_id="session-1"),
++        load_transcript=lambda session_id: [],
++    )
++    runner._get_or_create_gateway_honcho = lambda session_key: (None, None)
++    runner._enrich_message_with_vision = AsyncMock(return_value="hi")
++    return runner
++
++
++def _make_source() -> SessionSource:
++    return SessionSource(
++        platform=Platform.TELEGRAM,
++        chat_id="12345",
++        chat_type="dm",
++        user_id="user-1",
++    )
++
++
++@pytest.mark.asyncio
++async def test_gateway_agent_receives_lane_kwargs(monkeypatch):
++    _install_fake_agent(monkeypatch)
++    runner = _make_runner()
++    config = {
++        "lane_routing": {
++            "entrypoints": {"gateway": {"node": "imac", "risk": "medium"}},
++            "model_map": {"ministral_3b_instruct": "local/3b"},
++            "runtime_map": {
++                "ministral_3b_instruct": {
++                    "provider": "custom",
++                    "base_url": "http://127.0.0.1:8003/v1",
++                }
++            },
++            "toolset_map": {"selected": ["file"]},
++        },
++    }
++    monkeypatch.setattr(gateway_run, "_load_gateway_config", lambda: config)
++    monkeypatch.setattr(gateway_run, "_resolve_gateway_model", lambda config=None: "base/model")
++    monkeypatch.setattr(
++        gateway_run,
++        "_resolve_runtime_agent_kwargs",
++        lambda: {
++            "provider": "openrouter",
++            "api_mode": "chat_completions",
++            "base_url": "https://openrouter.ai/api/v1",
++            "api_key": "test-key",
++        },
++    )
++
++    import hermes_cli.tools_config as tools_config
++    monkeypatch.setattr(tools_config, "_get_platform_tools", lambda user_config, platform_key: {"core"})
++
++    result = await runner._run_agent(
++        message="hi",
++        context_prompt="",
++        history=[],
++        source=_make_source(),
++        session_id="session-1",
++        session_key="agent:main:telegram:dm:12345",
++    )
++
++    assert result["final_response"] == "ok"
++    assert _CapturingAgent.last_init["lane_stage"] == "normal_turn"
++    assert _CapturingAgent.last_init["lane_node"] == "imac"
++    assert _CapturingAgent.last_init["lane_risk"] == "medium"
++    assert _CapturingAgent.last_init["lane_model_map"] == {"ministral_3b_instruct": "local/3b"}
++    assert _CapturingAgent.last_init["lane_runtime_map"] == {
++        "ministral_3b_instruct": {
++            "provider": "custom",
++            "base_url": "http://127.0.0.1:8003/v1",
++        }
++    }
++    assert _CapturingAgent.last_init["lane_toolset_map"] == {"selected": ["file"]}
++    assert _CapturingAgent.last_init["enabled_toolsets"] is None
++
++
++def test_agent_cache_signature_includes_lane_kwargs():
++    runtime = {"api_key": "test-key", "base_url": "http://local", "provider": "custom"}
++    base = gateway_run.GatewayRunner._agent_config_signature(
++        "model",
++        runtime,
++        ["core"],
++        "",
++        {"lane_stage": "normal_turn", "lane_node": "air5"},
++    )
++    changed = gateway_run.GatewayRunner._agent_config_signature(
++        "model",
++        runtime,
++        ["core"],
++        "",
++        {"lane_stage": "diagnose", "lane_node": "air5"},
++    )
++
++    assert base != changed
++
++
++@pytest.mark.asyncio
++async def test_session_model_override_suppresses_lane_model_map(monkeypatch):
++    _install_fake_agent(monkeypatch)
++    runner = _make_runner()
++    runner._session_model_overrides["agent:main:telegram:dm:12345"] = {"model": "manual/model"}
++    config = {
++        "lane_routing": {
++            "model_map": {"ministral_8b_instruct": "local/8b"},
++            "runtime_map": {
++                "ministral_8b_instruct": {
++                    "base_url": "http://127.0.0.1:8008/v1",
++                }
++            },
++        }
++    }
++    monkeypatch.setattr(gateway_run, "_load_gateway_config", lambda: config)
++    monkeypatch.setattr(gateway_run, "_resolve_gateway_model", lambda config=None: "base/model")
++    monkeypatch.setattr(
++        gateway_run,
++        "_resolve_runtime_agent_kwargs",
++        lambda: {
++            "provider": "openrouter",
++            "api_mode": "chat_completions",
++            "base_url": "https://openrouter.ai/api/v1",
++            "api_key": "test-key",
++        },
++    )
++
++    import hermes_cli.tools_config as tools_config
++    monkeypatch.setattr(tools_config, "_get_platform_tools", lambda user_config, platform_key: {"core"})
++
++    await runner._run_agent(
++        message="hi",
++        context_prompt="",
++        history=[],
++        source=_make_source(),
++        session_id="session-1",
++        session_key="agent:main:telegram:dm:12345",
++    )
++
++    assert _CapturingAgent.last_init["model"] == "manual/model"
++    assert _CapturingAgent.last_init["lane_model_map"] == {}
++    assert _CapturingAgent.last_init["lane_runtime_map"] == {}
+diff --git a/tests/hermes_cli/test_background_route_gate.py b/tests/hermes_cli/test_background_route_gate.py
+new file mode 100644
+index 000000000..385807a65
+--- /dev/null
++++ b/tests/hermes_cli/test_background_route_gate.py
+@@ -0,0 +1,189 @@
++import json
++from unittest.mock import patch
++
++from cli import HermesCLI
++from hermes_cli.route_gate import (
++    deterministic_hermes_route_gate,
++    deterministic_hermes_route_dispatch_packet,
++    deterministic_hermes_route_gate_text,
++    route_dispatch_primary_enabled,
++)
++
++
++def test_route_dispatch_primary_defaults_on(monkeypatch):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++
++    assert route_dispatch_primary_enabled() is True
++
++
++def test_route_dispatch_primary_env_can_disable_gate(monkeypatch):
++    monkeypatch.setenv("HERMES_ROUTE_DISPATCH_PRIMARY", "0")
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++
++    assert route_dispatch_primary_enabled() is False
++    assert deterministic_hermes_route_gate(
++        "Task: inspect a 24B safetensors coding model. Options: self, air5, specialist."
++    ) is None
++
++
++def test_route_dispatch_disabled_env_overrides_primary(monkeypatch):
++    monkeypatch.setenv("HERMES_ROUTE_DISPATCH_PRIMARY", "1")
++    monkeypatch.setenv("HERMES_ROUTE_DISPATCH_DISABLED", "1")
++
++    assert route_dispatch_primary_enabled() is False
++
++
++def test_deterministic_route_gate_maps_24b_conversion_to_specialist(monkeypatch):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++
++    decision = deterministic_hermes_route_gate(
++        "Task: inspect a 24B safetensors coding model and design a conversion runner. "
++        "Options: self, air5, specialist."
++    )
++
++    assert decision == {
++        "reason": "inspect a 24B safetensors coding model and design a conversion runner.",
++        "route": "specialist",
++        "source": "deterministic_gate",
++        "escalation": "l2_mario",
++    }
++
++
++def test_deterministic_route_gate_ignores_option_labels_for_route_choice(monkeypatch):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++
++    decision = deterministic_hermes_route_gate(
++        "Task: run a local JSONL dataset smoke check. Options: self, air5, specialist."
++    )
++
++    assert decision["route"] == "self"
++    assert decision["reason"] == "run a local JSONL dataset smoke check."
++
++
++def test_deterministic_route_gate_requires_explicit_task_and_options(monkeypatch):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++
++    assert deterministic_hermes_route_gate("Answer a short math question.") is None
++    assert deterministic_hermes_route_gate("Task: inspect a 24B model.") is None
++    assert deterministic_hermes_route_gate("Options: self, air5, specialist.") is None
++
++
++def test_deterministic_route_dispatch_packet_exposes_canonical_state(monkeypatch):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++
++    packet = deterministic_hermes_route_dispatch_packet(
++        "Task: run a local JSONL dataset smoke check. Options: self, air5, specialist."
++    )
++
++    assert packet == {
++        "packet_state": "route_decided",
++        "status": "ready_for_dispatch",
++        "source": "deterministic_gate",
++        "route": "self",
++        "escalation": "l0_executor",
++        "reason": "run a local JSONL dataset smoke check.",
++        "retry_count": 0,
++        "unresolved_risks": [],
++    }
++
++
++def test_deterministic_route_gate_text_exposes_public_decision_only(monkeypatch):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++
++    text = deterministic_hermes_route_gate_text(
++        "Task: inspect a 24B safetensors coding model and design a conversion runner. "
++        "Options: self, air5, specialist."
++    )
++
++    assert json.loads(text) == {
++        "reason": "inspect a 24B safetensors coding model and design a conversion runner.",
++        "route": "specialist",
++        "source": "deterministic_gate",
++    }
++
++
++def test_background_command_short_circuits_explicit_route_gate_without_credentials(monkeypatch, tmp_path):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_OUTBOX_DISABLED", raising=False)
++    monkeypatch.setenv("HERMES_ROUTE_DISPATCH_OUTBOX_DIR", str(tmp_path / "outbox"))
++
++    cli_obj = HermesCLI.__new__(HermesCLI)
++    cli_obj._background_task_counter = 0
++    cli_obj._background_tasks = {}
++
++    outputs = []
++
++    with (
++        patch("cli._cprint", side_effect=lambda text="", *args, **kwargs: outputs.append(text)),
++        patch.object(cli_obj, "_ensure_runtime_credentials", side_effect=AssertionError("credentials not needed")),
++    ):
++        cli_obj._handle_background_command(
++            "/background Task: inspect a 24B safetensors coding model and design a conversion runner. "
++            "Options: self, air5, specialist."
++        )
++
++    assert cli_obj._background_task_counter == 0
++    assert cli_obj._background_tasks == {}
++    assert any("Background route gate complete" in line for line in outputs)
++    packet = json.loads(outputs[-1])
++    assert packet["packet_state"] == "route_decided"
++    assert packet["status"] == "ready_for_dispatch"
++    assert packet["route"] == "specialist"
++    assert packet["escalation"] == "l2_mario"
++    assert packet["retry_count"] == 0
++    assert packet["unresolved_risks"] == []
++    assert packet["outbox_path"].startswith(str(tmp_path / "outbox"))
++
++    outbox_path = tmp_path / "outbox" / packet["outbox_path"].rsplit("/", 1)[-1]
++    assert outbox_path.exists()
++    saved_packet = json.loads(outbox_path.read_text())
++    assert saved_packet["dispatch_id"].startswith("hermes_route_")
++    assert saved_packet["packet_state"] == "route_decided"
++    assert saved_packet["status"] == "ready_for_dispatch"
++    assert saved_packet["route"] == "specialist"
++    assert saved_packet["outbox_owner"] == "hermes"
++    assert saved_packet["target_authority"] == "imac_mario"
++    assert saved_packet["target_node"] == "imac"
++    assert saved_packet["raw_child_data"] is False
++    assert saved_packet["privacy_class"] == "operator_route_packet"
++    assert saved_packet["export_boundary"] == "route_metadata_only"
++    assert saved_packet["route_plan"] == {
++        "route": "specialist",
++        "escalation": "l2_mario",
++        "source": "deterministic_gate",
++    }
++    assert saved_packet["expected_receipt"]["required"] is True
++    assert "output_sha256" in saved_packet["expected_receipt"]["fields"]
++
++
++def test_background_route_gate_can_skip_outbox_write(monkeypatch, tmp_path):
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_ROUTE_DISPATCH_DISABLED", raising=False)
++    monkeypatch.setenv("HERMES_ROUTE_DISPATCH_OUTBOX_DISABLED", "1")
++    monkeypatch.setenv("HERMES_ROUTE_DISPATCH_OUTBOX_DIR", str(tmp_path / "outbox"))
++
++    cli_obj = HermesCLI.__new__(HermesCLI)
++    cli_obj._background_task_counter = 0
++    cli_obj._background_tasks = {}
++
++    outputs = []
++
++    with (
++        patch("cli._cprint", side_effect=lambda text="", *args, **kwargs: outputs.append(text)),
++        patch.object(cli_obj, "_ensure_runtime_credentials", side_effect=AssertionError("credentials not needed")),
++    ):
++        cli_obj._handle_background_command(
++            "/background Task: inspect a 24B safetensors coding model and design a conversion runner. "
++            "Options: self, air5, specialist."
++        )
++
++    packet = json.loads(outputs[-1])
++    assert "outbox_path" not in packet
++    assert not (tmp_path / "outbox").exists()
+diff --git a/tests/hermes_cli/test_lane_policy.py b/tests/hermes_cli/test_lane_policy.py
+new file mode 100644
+index 000000000..bf4e26ee7
+--- /dev/null
++++ b/tests/hermes_cli/test_lane_policy.py
+@@ -0,0 +1,109 @@
++from hermes_cli.lane_policy import (
++    CacheProfile,
++    HermesLane,
++    IngressStage,
++    LaneInput,
++    ModelClass,
++    NodeClass,
++    PersonaProfile,
++    TaskRisk,
++    ToolsetProfile,
++    select_lane,
++)
++
++
++def test_air5_normal_turn_uses_8b_instruct():
++    decision = select_lane(
++        LaneInput(
++            stage=IngressStage.NORMAL_TURN,
++            node=NodeClass.AIR5,
++            risk=TaskRisk.LOW,
++        )
++    )
++
++    assert decision.lane == HermesLane.GENERAL
++    assert decision.model == ModelClass.MINISTRAL_8B_INSTRUCT
++    assert decision.target_node == NodeClass.AIR5
++    assert decision.cache == CacheProfile.HOT_SESSION
++    assert decision.toolset == ToolsetProfile.SELECTED
++
++
++def test_air1_worker_task_uses_worker_instruct_without_persona():
++    decision = select_lane(
++        LaneInput(
++            stage=IngressStage.WORKER_TASK,
++            node=NodeClass.AIR1,
++            risk=TaskRisk.LOW,
++        )
++    )
++
++    assert decision.model == ModelClass.MINISTRAL_8B_INSTRUCT
++    assert decision.cache == CacheProfile.SMALL_WORKER
++    assert decision.toolset == ToolsetProfile.RESTRICTED_WORKER
++    assert decision.persona == PersonaProfile.NONE
++
++
++def test_imac_diagnose_uses_3b_reasoning():
++    decision = select_lane(
++        LaneInput(
++            stage=IngressStage.DIAGNOSE,
++            node=NodeClass.IMAC,
++            risk=TaskRisk.MEDIUM,
++        )
++    )
++
++    assert decision.lane == HermesLane.REASONING
++    assert decision.model == ModelClass.MINISTRAL_3B_REASONING
++    assert decision.cache == CacheProfile.FAILURE
++    assert decision.toolset == ToolsetProfile.READ_ONLY
++
++
++def test_high_risk_complex_plan_escalates_to_air5_8b_reasoning():
++    decision = select_lane(
++        LaneInput(
++            stage=IngressStage.COMPLEX_PLAN,
++            node=NodeClass.AIR1,
++            risk=TaskRisk.HIGH,
++        )
++    )
++
++    assert decision.lane == HermesLane.REASONING
++    assert decision.model == ModelClass.MINISTRAL_8B_REASONING
++    assert decision.target_node == NodeClass.AIR5
++    assert decision.escalate is True
++
++
++def test_user_render_is_only_canonical_alice_boundary():
++    render = select_lane(
++        LaneInput(
++            stage=IngressStage.USER_RENDER,
++            node=NodeClass.AIR5,
++            risk=TaskRisk.LOW,
++        )
++    )
++    diagnose = select_lane(
++        LaneInput(
++            stage=IngressStage.DIAGNOSE,
++            node=NodeClass.AIR5,
++            risk=TaskRisk.LOW,
++        )
++    )
++
++    assert render.lane == HermesLane.RENDER
++    assert render.persona == PersonaProfile.ALICE_CANONICAL
++    assert diagnose.persona == PersonaProfile.NONE
++
++
++def test_verify_is_runtime_first_without_llm():
++    decision = select_lane(
++        LaneInput(
++            stage=IngressStage.VERIFY,
++            node=NodeClass.IMAC,
++            risk=TaskRisk.MEDIUM,
++        )
++    )
++
++    assert decision.lane == HermesLane.RUNTIME
++    assert decision.model == ModelClass.NONE
++    assert decision.toolset == ToolsetProfile.TERMINAL_VERIFY
++    assert decision.runtime_first is True
+diff --git a/tests/hermes_cli/test_lane_routing_config.py b/tests/hermes_cli/test_lane_routing_config.py
+new file mode 100644
+index 000000000..b5103ddd1
+--- /dev/null
++++ b/tests/hermes_cli/test_lane_routing_config.py
+@@ -0,0 +1,52 @@
++from hermes_cli.config import DEFAULT_CONFIG, get_lane_routing_config
++
++
++def test_default_lane_routing_config_is_empty():
++    cfg = get_lane_routing_config(DEFAULT_CONFIG)
++
++    assert cfg == {"model_map": {}, "runtime_map": {}, "toolset_map": {}}
++
++
++def test_lane_routing_config_normalizes_maps():
++    cfg = get_lane_routing_config(
++        {
++            "lane_routing": {
++                "model_map": {
++                    "ministral_8b_instruct": "local/ministral-8b",
++                    "blank": "",
++                },
++                "runtime_map": {
++                    "ministral_3b_instruct": {
++                        "model": "local/ministral-3b",
++                        "provider": "custom",
++                        "base_url": "http://127.0.0.1:8003/v1",
++                        "api_key": "local",
++                        "api_mode": "chat_completions",
++                        "ignored": "value",
++                    },
++                    "blank": {"base_url": ""},
++                    "ignored": "not-a-dict",
++                },
++                "toolset_map": {
++                    "read_only": ["file", "terminal", ""],
++                    "selected": "file,terminal, memory ",
++                    "ignored": 123,
++                },
++            }
++        }
++    )
++
++    assert cfg["model_map"] == {"ministral_8b_instruct": "local/ministral-8b"}
++    assert cfg["runtime_map"] == {
++        "ministral_3b_instruct": {
++            "model": "local/ministral-3b",
++            "provider": "custom",
++            "base_url": "http://127.0.0.1:8003/v1",
++            "api_key": "local",
++            "api_mode": "chat_completions",
++        }
++    }
++    assert cfg["toolset_map"] == {
++        "read_only": ["file", "terminal"],
++        "selected": ["file", "terminal", "memory"],
++    }
+diff --git a/tests/hermes_cli/test_lane_runtime.py b/tests/hermes_cli/test_lane_runtime.py
+new file mode 100644
+index 000000000..7e7aa30df
+--- /dev/null
++++ b/tests/hermes_cli/test_lane_runtime.py
+@@ -0,0 +1,71 @@
++from hermes_cli.lane_runtime import resolve_lane_kwargs
++
++
++def test_default_cli_lane_kwargs_preserve_empty_maps():
++    kwargs = resolve_lane_kwargs("cli", config={"lane_routing": {}})
++
++    assert kwargs["lane_stage"] == "normal_turn"
++    assert kwargs["lane_node"] == "air5"
++    assert kwargs["lane_risk"] == "low"
++    assert kwargs["lane_model_map"] == {}
++    assert kwargs["lane_runtime_map"] == {}
++    assert kwargs["lane_toolset_map"] == {}
++
++
++def test_entrypoint_override_and_maps_are_normalized():
++    kwargs = resolve_lane_kwargs(
++        "gateway_background",
++        config={
++            "lane_routing": {
++                "defaults": {"node": "imac"},
++                "entrypoints": {
++                    "gateway_background": {
++                        "stage": "diagnose",
++                        "risk": "high",
++                    },
++                },
++                "model_map": {"ministral_3b_reasoning": "local/3b-reasoning"},
++                "runtime_map": {
++                    "ministral_3b_reasoning": {
++                        "provider": "custom",
++                        "base_url": "http://127.0.0.1:8003/v1",
++                    }
++                },
++                "toolset_map": {"read_only": "file, terminal"},
++            },
++        },
++    )
++
++    assert kwargs["lane_stage"] == "diagnose"
++    assert kwargs["lane_node"] == "imac"
++    assert kwargs["lane_risk"] == "high"
++    assert kwargs["lane_model_map"] == {"ministral_3b_reasoning": "local/3b-reasoning"}
++    assert kwargs["lane_runtime_map"] == {
++        "ministral_3b_reasoning": {
++            "provider": "custom",
++            "base_url": "http://127.0.0.1:8003/v1",
++        }
++    }
++    assert kwargs["lane_toolset_map"] == {"read_only": ["file", "terminal"]}
++
++
++def test_disabled_lane_routing_returns_no_kwargs():
++    assert resolve_lane_kwargs("cli", config={"lane_routing": {"enabled": False}}) == {}
++
++
++def test_manual_model_override_can_suppress_lane_model_map():
++    kwargs = resolve_lane_kwargs(
++        "gateway",
++        config={
++            "lane_routing": {
++                "model_map": {"ministral_8b_instruct": "local/8b"},
++                "runtime_map": {"ministral_8b_instruct": {"base_url": "http://127.0.0.1:8008/v1"}},
++                "toolset_map": {"selected": ["file"]},
++            },
++        },
++        apply_model_map=False,
++    )
++
++    assert kwargs["lane_model_map"] == {}
++    assert kwargs["lane_runtime_map"] == {}
++    assert kwargs["lane_toolset_map"] == {"selected": ["file"]}
+diff --git a/tests/run_agent/test_lane_policy_wiring.py b/tests/run_agent/test_lane_policy_wiring.py
+new file mode 100644
+index 000000000..94473940a
+--- /dev/null
++++ b/tests/run_agent/test_lane_policy_wiring.py
+@@ -0,0 +1,266 @@
++from unittest.mock import patch
++
++from run_agent import AIAgent
++
++
++def _make_tool_defs(*names):
++    return [
++        {
++            "type": "function",
++            "function": {
++                "name": name,
++                "description": f"{name} tool",
++                "parameters": {"type": "object", "properties": {}},
++            },
++        }
++        for name in names
++    ]
++
++
++def _make_agent(**kwargs):
++    kwargs.setdefault("api_key", "test-key-1234567890")
++    with (
++        patch("run_agent.get_tool_definitions", return_value=_make_tool_defs("terminal")),
++        patch("run_agent.check_toolset_requirements", return_value={}),
++        patch("run_agent.OpenAI"),
++        patch("hermes_cli.config.load_config", return_value={"compression": {"enabled": False}}),
++    ):
++        return AIAgent(
++            quiet_mode=True,
++            skip_context_files=True,
++            skip_memory=True,
++            **kwargs,
++        )
++
++
++def test_lane_stage_records_decision_without_changing_default_model():
++    agent = _make_agent(
++        model="existing/model",
++        lane_stage="normal_turn",
++        lane_node="air5",
++        lane_risk="low",
++    )
++
++    assert agent.model == "existing/model"
++    assert agent.lane_policy["model"] == "ministral_8b_instruct"
++    assert agent.lane_policy["cache"] == "hot_session"
++    assert agent.lane_policy["toolset"] == "selected"
++
++
++def test_lane_model_map_can_override_concrete_model():
++    agent = _make_agent(
++        model="existing/model",
++        lane_stage="normal_turn",
++        lane_node="air5",
++        lane_risk="low",
++        lane_model_map={"ministral_8b_instruct": "local/ministral-8b"},
++    )
++
++    assert agent.model == "local/ministral-8b"
++    assert agent.lane_policy["model"] == "ministral_8b_instruct"
++
++
++def test_lane_toolset_map_applies_only_when_enabled_toolsets_absent():
++    captured = {}
++
++    def fake_get_tool_definitions(enabled_toolsets=None, disabled_toolsets=None, quiet_mode=False):
++        captured["enabled_toolsets"] = enabled_toolsets
++        return _make_tool_defs("terminal")
++
++    with (
++        patch("run_agent.get_tool_definitions", side_effect=fake_get_tool_definitions),
++        patch("run_agent.check_toolset_requirements", return_value={}),
++        patch("run_agent.OpenAI"),
++        patch("hermes_cli.config.load_config", return_value={"compression": {"enabled": False}}),
++    ):
++        AIAgent(
++            api_key="test-key-1234567890",
++            quiet_mode=True,
++            skip_context_files=True,
++            skip_memory=True,
++            lane_stage="diagnose",
++            lane_node="imac",
++            lane_risk="medium",
++            lane_toolset_map={"read_only": ["file", "terminal"]},
++        )
++
++    assert captured["enabled_toolsets"] == ["file", "terminal"]
++
++
++def test_explicit_enabled_toolsets_win_over_lane_toolset_map():
++    captured = {}
++
++    def fake_get_tool_definitions(enabled_toolsets=None, disabled_toolsets=None, quiet_mode=False):
++        captured["enabled_toolsets"] = enabled_toolsets
++        return _make_tool_defs("terminal")
++
++    with (
++        patch("run_agent.get_tool_definitions", side_effect=fake_get_tool_definitions),
++        patch("run_agent.check_toolset_requirements", return_value={}),
++        patch("run_agent.OpenAI"),
++        patch("hermes_cli.config.load_config", return_value={"compression": {"enabled": False}}),
++    ):
++        AIAgent(
++            api_key="test-key-1234567890",
++            quiet_mode=True,
++            skip_context_files=True,
++            skip_memory=True,
++            enabled_toolsets=["development"],
++            lane_stage="diagnose",
++            lane_node="imac",
++            lane_risk="medium",
++            lane_toolset_map={"read_only": ["file", "terminal"]},
++        )
++
++    assert captured["enabled_toolsets"] == ["development"]
++
++
++def test_lane_maps_can_load_from_config_when_not_passed_explicitly():
++    captured = {}
++
++    def fake_get_tool_definitions(enabled_toolsets=None, disabled_toolsets=None, quiet_mode=False):
++        captured["enabled_toolsets"] = enabled_toolsets
++        return _make_tool_defs("terminal")
++
++    with (
++        patch("run_agent.get_tool_definitions", side_effect=fake_get_tool_definitions),
++        patch("run_agent.check_toolset_requirements", return_value={}),
++        patch("run_agent.OpenAI"),
++        patch(
++            "hermes_cli.config.load_config",
++            return_value={
++                "compression": {"enabled": False},
++                "lane_routing": {
++                    "model_map": {"ministral_3b_reasoning": "local/ministral-3b-reasoning"},
++                    "runtime_map": {
++                        "ministral_3b_reasoning": {
++                            "provider": "custom",
++                            "base_url": "http://127.0.0.1:8003/v1",
++                        }
++                    },
++                    "toolset_map": {"read_only": ["file"]},
++                },
++            },
++        ),
++    ):
++        agent = AIAgent(
++            model="existing/model",
++            api_key="test-key-1234567890",
++            quiet_mode=True,
++            skip_context_files=True,
++            skip_memory=True,
++            lane_stage="diagnose",
++            lane_node="imac",
++            lane_risk="medium",
++        )
++
++    assert agent.model == "local/ministral-3b-reasoning"
++    assert agent.provider == "custom"
++    assert agent.base_url == "http://127.0.0.1:8003/v1"
++    assert captured["enabled_toolsets"] == ["file"]
++
++
++def test_lane_runtime_map_can_override_endpoint_and_model():
++    agent = _make_agent(
++        model="existing/model",
++        provider="openrouter",
++        base_url="https://openrouter.ai/api/v1",
++        api_key="original-key",
++        api_mode="chat_completions",
++        lane_stage="normal_turn",
++        lane_node="air5",
++        lane_risk="low",
++        lane_runtime_map={
++            "ministral_8b_instruct": {
++                "model": "local/ministral-8b",
++                "provider": "custom",
++                "base_url": "http://127.0.0.1:8008/v1",
++                "api_key": "local",
++                "api_mode": "chat_completions",
++            }
++        },
++    )
++
++    assert agent.model == "local/ministral-8b"
++    assert agent.provider == "custom"
++    assert agent.base_url == "http://127.0.0.1:8008/v1"
++    assert agent.api_key == "local"
++    assert agent.api_mode == "chat_completions"
++
++
++def test_lane_model_map_wins_over_runtime_map_model():
++    agent = _make_agent(
++        model="existing/model",
++        lane_stage="normal_turn",
++        lane_node="air5",
++        lane_risk="low",
++        lane_runtime_map={
++            "ministral_8b_instruct": {
++                "model": "runtime/model",
++                "base_url": "http://127.0.0.1:8008/v1",
++            }
++        },
++        lane_model_map={"ministral_8b_instruct": "model-map/model"},
++    )
++
++    assert agent.model == "model-map/model"
++    assert agent.base_url == "http://127.0.0.1:8008/v1"
++
++
++def test_rust_lane_policy_can_drive_lane_maps_when_enabled():
++    rust_payload = {
++        "bridge_mode": "preview-only",
++        "decision": {
++            "lane": "reasoning",
++            "model": "ministral_8b_reasoning",
++            "target_node": "air5",
++            "cache": "expanded",
++            "toolset": "repo_read_only",
++            "persona": "none",
++            "runtime_first": False,
++            "escalate": True,
++        },
++    }
++
++    with (
++        patch.dict("os.environ", {"HERMES_RUST_LANE_POLICY": "1"}, clear=False),
++        patch("run_agent._request_rust_lane_policy", return_value=rust_payload) as request_policy,
++    ):
++        agent = _make_agent(
++            model="existing/model",
++            lane_stage="complex_plan",
++            lane_node="air1",
++            lane_risk="high",
++            lane_runtime_map={
++                "ministral_8b_reasoning": {
++                    "model": "local/devstral-reasoning",
++                    "provider": "custom",
++                    "base_url": "http://127.0.0.1:8009/v1",
++                }
++            },
++            lane_toolset_map={"repo_read_only": ["file", "terminal"]},
++        )
++
++    request_policy.assert_called_once()
++    assert agent.lane_policy_source == "rust"
++    assert agent.lane_policy["model"] == "ministral_8b_reasoning"
++    assert agent.model == "local/devstral-reasoning"
++    assert agent.provider == "custom"
++    assert agent.base_url == "http://127.0.0.1:8009/v1"
++
++
++def test_rust_lane_policy_failure_falls_back_to_python_policy():
++    with (
++        patch.dict("os.environ", {"HERMES_RUST_LANE_POLICY": "1"}, clear=False),
++        patch("run_agent._request_rust_lane_policy", side_effect=TimeoutError("offline")),
++    ):
++        agent = _make_agent(
++            model="existing/model",
++            lane_stage="diagnose",
++            lane_node="imac",
++            lane_risk="medium",
++        )
++
++    assert agent.lane_policy_source == "python"
++    assert agent.lane_policy["model"] == "ministral_3b_reasoning"
++    assert agent._last_rust_lane_policy["applied"] is False
+diff --git a/tests/run_agent/test_rust_chat_preview.py b/tests/run_agent/test_rust_chat_preview.py
+new file mode 100644
+index 000000000..84b9aeb4c
+--- /dev/null
++++ b/tests/run_agent/test_rust_chat_preview.py
+@@ -0,0 +1,184 @@
++import json
++
++from run_agent import (
++    DEFAULT_RUST_CHAT_PREVIEW_URL,
++    AIAgent,
++    _build_rust_chat_preview_payload,
++    _request_rust_chat_preview,
++    _rust_chat_preview_enabled,
++    _rust_chat_preview_result_text,
++)
++
++
++def test_rust_chat_preview_is_disabled_by_default(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CHAT_PREVIEW", raising=False)
++    monkeypatch.delenv("HERMES_RUST_CHAT_PRIMARY", raising=False)
++
++    assert _rust_chat_preview_enabled() is False
++
++
++def test_rust_chat_primary_enables_plain_chat_rust_path(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CHAT_PREVIEW", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CHAT_PRIMARY", "1")
++
++    assert _rust_chat_preview_enabled() is True
++
++
++def test_rust_chat_preview_flag_remains_compatibility_alias(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CHAT_PRIMARY", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CHAT_PREVIEW", "1")
++
++    assert _rust_chat_preview_enabled() is True
++
++
++def test_build_rust_chat_preview_payload_preserves_plain_messages():
++    payload = _build_rust_chat_preview_payload(
++        [
++            {"role": "system", "content": "system rules"},
++            {"role": "user", "content": "hello"},
++            {"role": "assistant", "content": {"answer": "old"}},
++            {"role": "user", "content": "next"},
++        ],
++        session_id="session-a",
++        max_new_tokens=64,
++    )
++
++    assert payload["session_id"] == "session-a"
++    assert payload["mode"] == "chat"
++    assert payload["stream"] is False
++    assert payload["fallback_allowed"] is True
++    assert payload["max_new_tokens"] == 64
++    assert payload["messages"][0] == {"role": "system", "content": "system rules"}
++    assert payload["messages"][2]["role"] == "assistant"
++    assert '"answer": "old"' in payload["messages"][2]["content"]
++
++
++def test_request_rust_chat_preview_posts_expected_json():
++    calls = []
++
++    class FakeResponse:
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def read(self):
++            return json.dumps({
++                "used_runtime": "rust",
++                "fallback_reason": None,
++                "text": "hello from rust",
++            }).encode("utf-8")
++
++    def fake_urlopen(request, timeout):
++        calls.append((request, timeout))
++        return FakeResponse()
++
++    response = _request_rust_chat_preview(
++        DEFAULT_RUST_CHAT_PREVIEW_URL,
++        {"session_id": "session-a", "messages": [{"role": "user", "content": "hi"}]},
++        timeout=0.25,
++        urlopen=fake_urlopen,
++    )
++
++    assert response["text"] == "hello from rust"
++    request, timeout = calls[0]
++    assert timeout == 0.25
++    assert request.full_url == DEFAULT_RUST_CHAT_PREVIEW_URL
++    assert request.get_method() == "POST"
++    assert request.headers["Content-type"] == "application/json"
++    assert json.loads(request.data.decode("utf-8"))["session_id"] == "session-a"
++
++
++def test_rust_chat_preview_result_text_requires_rust_runtime():
++    assert _rust_chat_preview_result_text({
++        "used_runtime": "rust",
++        "fallback_reason": None,
++        "text": " ok ",
++    }) == "ok"
++    assert _rust_chat_preview_result_text({
++        "used_runtime": "python_fallback",
++        "fallback_reason": "unsupported_mode",
++        "text": "fallback",
++    }) is None
++    assert _rust_chat_preview_result_text({
++        "used_runtime": "rust",
++        "fallback_reason": "worker_error",
++        "text": "fallback",
++    }) is None
++
++
++def test_maybe_rust_chat_preview_response_applies_when_enabled(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CHAT_PREVIEW", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CHAT_PRIMARY", "1")
++
++    def fake_request(url, payload, *, timeout):
++        assert payload["session_id"] == "test-session"
++        assert payload["messages"][-1] == {"role": "user", "content": "route this"}
++        return {
++            "used_runtime": "rust",
++            "fallback_reason": None,
++            "text": "routed by rust",
++        }
++
++    monkeypatch.setattr("run_agent._request_rust_chat_preview", fake_request)
++
++    agent = object.__new__(AIAgent)
++    agent.session_id = "test-session"
++    agent.max_tokens = 128
++    agent.tools = []
++    agent.quiet_mode = True
++    agent.verbose_logging = False
++    agent.log_prefix = ""
++
++    text = agent._maybe_rust_chat_preview_response([
++        {"role": "system", "content": "rules"},
++        {"role": "user", "content": "route this"},
++    ])
++
++    assert text == "routed by rust"
++    assert agent._last_rust_chat_preview["used_runtime"] == "rust"
++
++
++def test_maybe_rust_chat_preview_response_skips_tool_turns(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CHAT_PREVIEW", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CHAT_PRIMARY", "1")
++
++    agent = object.__new__(AIAgent)
++    agent.tools = [{"type": "function"}]
++
++    text = agent._maybe_rust_chat_preview_response([
++        {"role": "user", "content": "needs a tool"},
++    ])
++
++    assert text is None
++    assert agent._last_rust_chat_preview == {
++        "applied": False,
++        "reason": "tools_or_transcript_present",
++    }
++
++
++def test_maybe_rust_chat_preview_response_falls_back_when_rust_unavailable(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CHAT_PREVIEW", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CHAT_PRIMARY", "1")
++
++    def fake_request(url, payload, *, timeout):
++        raise TimeoutError("rust bridge unavailable")
++
++    monkeypatch.setattr("run_agent._request_rust_chat_preview", fake_request)
++
++    agent = object.__new__(AIAgent)
++    agent.session_id = "test-session"
++    agent.max_tokens = 128
++    agent.tools = []
++    agent.quiet_mode = True
++    agent.verbose_logging = False
++    agent.log_prefix = ""
++
++    text = agent._maybe_rust_chat_preview_response([
++        {"role": "user", "content": "continue on python"},
++    ])
++
++    assert text is None
++    assert agent._last_rust_chat_preview["applied"] is False
++    assert "rust bridge unavailable" in agent._last_rust_chat_preview["error"]
+diff --git a/tests/run_agent/test_rust_context_preview.py b/tests/run_agent/test_rust_context_preview.py
+new file mode 100644
+index 000000000..3ad3bf046
+--- /dev/null
++++ b/tests/run_agent/test_rust_context_preview.py
+@@ -0,0 +1,259 @@
++import json
++
++from run_agent import (
++    DEFAULT_RUST_CONTEXT_PREVIEW_URL,
++    DEFAULT_RUST_RUNTIME_CONTRACT_URL,
++    AIAgent,
++    _apply_rust_context_preview_packet,
++    _build_rust_context_preview_payload,
++    _request_rust_context_preview,
++    _request_rust_runtime_contract,
++    _rust_context_apply_enabled,
++    _rust_context_preview_enabled,
++    _rust_runtime_contract_enabled,
++)
++
++
++def test_rust_context_preview_is_disabled_by_default(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_PREVIEW", raising=False)
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_APPLY", raising=False)
++
++    assert _rust_context_preview_enabled() is False
++    assert _rust_context_apply_enabled() is False
++    assert _rust_runtime_contract_enabled() is False
++
++
++def test_rust_context_primary_enables_preview_and_apply(monkeypatch):
++    monkeypatch.setenv("HERMES_RUST_CONTEXT_PRIMARY", "1")
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_PREVIEW", raising=False)
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_APPLY", raising=False)
++
++    assert _rust_context_preview_enabled() is True
++    assert _rust_context_apply_enabled() is True
++
++
++def test_rust_context_preview_flag_remains_dry_run_alias(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_PRIMARY", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CONTEXT_PREVIEW", "1")
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_APPLY", raising=False)
++
++    assert _rust_context_preview_enabled() is True
++    assert _rust_context_apply_enabled() is False
++
++
++def test_rust_context_apply_flag_does_not_request_preview_by_itself(monkeypatch):
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_PRIMARY", raising=False)
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_PREVIEW", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CONTEXT_APPLY", "1")
++
++    assert _rust_context_preview_enabled() is False
++    assert _rust_context_apply_enabled() is True
++
++
++def test_build_rust_context_preview_payload_preserves_message_content():
++    payload = _build_rust_context_preview_payload(
++        [
++            {"role": "system", "content": "system rules"},
++            {"role": "user", "content": "old request"},
++            {"role": "assistant", "content": "old answer"},
++            {"role": "user", "content": "current request"},
++        ],
++        max_prompt_tokens=100,
++        reserved_response_tokens=16,
++    )
++
++    assert payload["budget"] == {
++        "max_prompt_tokens": 100,
++        "reserved_response_tokens": 16,
++    }
++    assert payload["segments"][0]["id"] == "0:system"
++    assert payload["segments"][0]["required"] is True
++    assert payload["segments"][0]["priority"] == 255
++    assert payload["segments"][1]["required"] is False
++    assert payload["segments"][3]["id"] == "3:user"
++    assert payload["segments"][3]["required"] is True
++    assert payload["segments"][3]["priority"] == 240
++    assert payload["segments"][3]["content"] == "current request"
++
++
++def test_request_rust_context_preview_posts_expected_json():
++    calls = []
++
++    class FakeResponse:
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def read(self):
++            return json.dumps({
++                "bridge_mode": "preview-only",
++                "packet": {"selected": [], "dropped": [], "pressure": "normal"},
++            }).encode("utf-8")
++
++    def fake_urlopen(request, timeout):
++        calls.append((request, timeout))
++        return FakeResponse()
++
++    response = _request_rust_context_preview(
++        DEFAULT_RUST_CONTEXT_PREVIEW_URL,
++        {"budget": {"max_prompt_tokens": 10, "reserved_response_tokens": 2}, "segments": []},
++        timeout=0.25,
++        urlopen=fake_urlopen,
++    )
++
++    assert response["bridge_mode"] == "preview-only"
++    request, timeout = calls[0]
++    assert timeout == 0.25
++    assert request.full_url == DEFAULT_RUST_CONTEXT_PREVIEW_URL
++    assert request.get_method() == "POST"
++    assert request.headers["Content-type"] == "application/json"
++    assert json.loads(request.data.decode("utf-8"))["budget"]["max_prompt_tokens"] == 10
++
++
++def test_request_rust_runtime_contract_posts_session_id():
++    calls = []
++
++    class FakeResponse:
++        def __enter__(self):
++            return self
++
++        def __exit__(self, exc_type, exc, tb):
++            return False
++
++        def read(self):
++            return json.dumps({
++                "bridge_mode": "preview-only",
++                "system_message": "Runtime compatibility contract",
++                "contract": {"contract_version": "hermes_mac_code_candle_devstral_v1"},
++            }).encode("utf-8")
++
++    def fake_urlopen(request, timeout):
++        calls.append((request, timeout))
++        return FakeResponse()
++
++    response = _request_rust_runtime_contract(
++        DEFAULT_RUST_RUNTIME_CONTRACT_URL,
++        session_id="session-a",
++        timeout=0.2,
++        urlopen=fake_urlopen,
++    )
++
++    assert response["system_message"] == "Runtime compatibility contract"
++    request, timeout = calls[0]
++    assert timeout == 0.2
++    assert request.full_url == DEFAULT_RUST_RUNTIME_CONTRACT_URL
++    assert json.loads(request.data.decode("utf-8"))["session_id"] == "session-a"
++
++
++def test_apply_rust_context_preview_packet_keeps_selected_messages_in_order():
++    messages = [
++        {"role": "system", "content": "system rules"},
++        {"role": "user", "content": "old request"},
++        {"role": "assistant", "content": "old answer"},
++        {"role": "user", "content": "current request"},
++    ]
++    preview = {
++        "packet": {
++            "selected": [
++                {"id": "0:system"},
++                {"id": "3:user"},
++            ],
++            "dropped": [{"id": "1:user"}, {"id": "2:assistant"}],
++            "pressure": "tight",
++        }
++    }
++
++    packed, result = _apply_rust_context_preview_packet(messages, preview)
++
++    assert result == {
++        "applied": True,
++        "selected": 2,
++        "dropped": 2,
++        "pressure": "tight",
++    }
++    assert [message["content"] for message in packed] == ["system rules", "current request"]
++    assert messages[1]["content"] == "old request"
++
++
++def test_apply_rust_context_preview_packet_skips_tool_transcripts():
++    messages = [
++        {"role": "assistant", "content": "", "tool_calls": [{"id": "call-1"}]},
++        {"role": "tool", "tool_call_id": "call-1", "content": "result"},
++    ]
++    preview = {"packet": {"selected": [{"id": "1:tool"}], "pressure": "normal"}}
++
++    packed, result = _apply_rust_context_preview_packet(messages, preview)
++
++    assert packed is messages
++    assert result == {"applied": False, "reason": "tool_transcript_present"}
++
++
++def test_maybe_preview_rust_context_budget_applies_when_enabled(monkeypatch):
++    monkeypatch.setenv("HERMES_RUST_CONTEXT_PRIMARY", "1")
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_PREVIEW", raising=False)
++    monkeypatch.delenv("HERMES_RUST_CONTEXT_APPLY", raising=False)
++    monkeypatch.setenv("HERMES_RUST_CONTEXT_PREVIEW_MAX_PROMPT_TOKENS", "100")
++    monkeypatch.setenv("HERMES_RUST_CONTEXT_PREVIEW_RESERVED_RESPONSE_TOKENS", "16")
++
++    def fake_request(url, payload, *, timeout):
++        assert payload["segments"][0]["id"] == "0:system"
++        return {
++            "bridge_mode": "preview-only",
++            "packet": {
++                "selected": [
++                    {"id": "0:system"},
++                    {"id": "2:user"},
++                ],
++                "dropped": [{"id": "1:assistant"}],
++                "pressure": "tight",
++            },
++        }
++
++    monkeypatch.setattr("run_agent._request_rust_context_preview", fake_request)
++
++    agent = object.__new__(AIAgent)
++    agent.session_id = "test"
++    agent.context_compressor = None
++    agent.max_tokens = None
++    agent.quiet_mode = True
++    agent.verbose_logging = False
++    agent.log_prefix = ""
++
++    packed = agent._maybe_preview_rust_context_budget(
++        [
++            {"role": "system", "content": "system"},
++            {"role": "assistant", "content": "old"},
++            {"role": "user", "content": "current"},
++        ],
++        10,
++    )
++
++    assert [message["content"] for message in packed] == ["system", "current"]
++    assert agent._last_rust_context_apply["applied"] is True
++
++
++def test_maybe_rust_runtime_contract_system_message_applies_when_enabled(monkeypatch):
++    monkeypatch.setenv("HERMES_RUST_RUNTIME_CONTRACT", "1")
++
++    def fake_request(url, *, session_id, timeout):
++        assert session_id == "test-session"
++        return {
++            "bridge_mode": "preview-only",
++            "system_message": "Hermes owns user memory; Candle owns Rust/Metal execution.",
++        }
++
++    monkeypatch.setattr("run_agent._request_rust_runtime_contract", fake_request)
++
++    agent = object.__new__(AIAgent)
++    agent.session_id = "test-session"
++    agent.quiet_mode = True
++    agent.verbose_logging = False
++    agent.log_prefix = ""
++
++    message = agent._maybe_rust_runtime_contract_system_message()
++
++    assert "Hermes owns user memory" in message
++    assert agent._last_rust_runtime_contract["bridge_mode"] == "preview-only"
